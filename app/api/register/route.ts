@@ -1,6 +1,6 @@
-// app/api/register/route.tsx
+// app/api/register/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../lib/db';
+import { getTursoClient } from '../../lib/turso';
 import bcrypt from 'bcryptjs';
 
 export async function POST(req: Request) {
@@ -14,17 +14,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const db = await getDb();
+    const client = getTursoClient();
 
     // Verifica si ya existe un usuario con el mismo username+tag O el mismo email
-    const existingUser = await db.get(
-      'SELECT id FROM users WHERE (username = ? AND tag = ?) OR email = ?', 
-      [username, tag, email]
-    );
+    const existingUser = await client.execute({
+      sql: 'SELECT id, email FROM users WHERE (username = ? AND tag = ?) OR email = ?',
+      args: [username, tag, email]
+    });
 
-    if (existingUser) {
+    if (existingUser.rows.length > 0) {
       // Determina qué campo causó el conflicto
-      const message = existingUser.email === email 
+      const userRow = existingUser.rows[0];
+      const message = userRow.email === email 
         ? 'El correo electrónico ya está registrado.' 
         : 'La combinación de nombre de usuario y tag ya existe.';
       
@@ -36,13 +37,12 @@ export async function POST(req: Request) {
 
     const hashedPassword = bcrypt.hashSync(password, 10);
 
-    // Corregí los parámetros para incluir el tag (faltaba en el array original)
-    const result = await db.run(
-      'INSERT INTO users (username, tag, email, password) VALUES (?, ?, ?, ?)',
-      [username, tag, email, hashedPassword]
-    );
+    const result = await client.execute({
+      sql: 'INSERT INTO users (username, tag, email, password) VALUES (?, ?, ?, ?)',
+      args: [username, tag, email, hashedPassword]
+    });
 
-    if (result.changes && result.changes > 0) {
+    if (result.rowsAffected && result.rowsAffected > 0) {
       return NextResponse.json(
         { message: 'Usuario registrado exitosamente.' },
         { status: 201 }
@@ -61,3 +61,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

@@ -1,7 +1,7 @@
 // app/api/auth/[...nextauth]/route.ts
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { getDb } from '../../../lib/db';
+import { getTursoClient } from '../../../lib/turso';
 import bcrypt from 'bcryptjs';
 import { DefaultSession } from 'next-auth';
 
@@ -25,17 +25,18 @@ export const authOptions = {
 
         const normalizedIdentifier = credentials.identifier.toLowerCase();
 
-        const db = await getDb();
-        const user = await db.get(
-          'SELECT id, username, email, password FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?',
-          [normalizedIdentifier, normalizedIdentifier]
-        );
+        const client = getTursoClient();
+        const result = await client.execute({
+          sql: 'SELECT id, username, email, password FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?',
+          args: [normalizedIdentifier, normalizedIdentifier]
+        });
 
-        if (!user) {
+        if (result.rows.length === 0) {
           throw new Error('Credenciales inválidas');
         }
 
-        const passwordMatch = bcrypt.compareSync(credentials.password, user.password);
+        const user = result.rows[0];
+        const passwordMatch = bcrypt.compareSync(credentials.password, user.password as string);
 
         if (!passwordMatch) {
           throw new Error('Credenciales inválidas');
@@ -43,8 +44,8 @@ export const authOptions = {
 
         return {
           id: user.id.toString(),
-          name: user.username,
-          email: user.email,
+          name: user.username as string,
+          email: user.email as string,
         };
       },
     }),
