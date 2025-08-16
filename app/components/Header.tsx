@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation'; 
 import { useState, useEffect, useRef } from 'react';
 import { UserCircleIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import Image from 'next/image';
+
 
 export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLogout, username }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -140,11 +142,13 @@ export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLo
   return (
     <header className="bg-white shadow-md py-4 px-6 flex justify-between items-center z-50">
       <div className="flex items-center space-x-4">
-        <img
-          src="public/images/icon-image.jpg"
-          alt="AnimeDrive Logo"
-          className="w-16 h-16 object-cover rounded"
-        />
+        <Image
+            src="/images/icon-image.jpg"
+            alt="Logo FT"
+            width={500}
+            height={500}
+            className="object-contain" 
+          />
         <Link href="/">
           <span className="text-2xl font-bold text-blue-600">AnimeDrive</span>
         </Link>
