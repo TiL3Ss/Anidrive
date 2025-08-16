@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: {
     template: '%s - AnimeDrive',
-    default: 'AnimeDrive',
+    default: 'AniDrive',
   },
   description: 'Registra y Organiza tus animes al detalle',
   viewport: 'width=device-width, initial-scale=1',

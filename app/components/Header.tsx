@@ -142,13 +142,14 @@ export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLo
   return (
     <header className="bg-white shadow-md py-4 px-6 flex justify-between items-center z-50">
       <div className="flex items-center space-x-4">
-        <Image
+        <div className="w-10 h-10 relative"> 
+          <Image
             src="/images/icon-image.jpg"
             alt="Logo FT"
-            width={500}
-            height={500}
-            className="object-contain" 
+            fill
+            className="object-contain"
           />
+        </div>
         <Link href="/">
           <span className="text-2xl font-bold text-blue-600">AnimeDrive</span>
         </Link>
