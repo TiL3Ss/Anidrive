@@ -141,7 +141,7 @@ export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLo
     <header className="bg-white shadow-md py-4 px-6 flex justify-between items-center z-50">
       <div className="flex items-center space-x-4">
         <img
-          src="public/icon-image.jpg"
+          src="public/images/icon-image.jpg"
           alt="AnimeDrive Logo"
           className="w-16 h-16 object-cover rounded"
         />
