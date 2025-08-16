@@ -1,6 +1,6 @@
 // app/api/user/[username]/animes/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../lib/db';
+import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 
@@ -50,28 +50,26 @@ export async function GET(
       );
     }
 
-    // Conectar a la base de datos SQLite
-    const db = await getDb();
+    // Conectar a la base de datos Turso
+    const client = getTursoClient();
 
     // Primero, obtener el ID del usuario
-    const userQuery = `
-      SELECT id
-      FROM users 
-      WHERE LOWER(username) = LOWER(?)
-      LIMIT 1
-    `;
+    const userResult = await client.execute({
+      sql: `SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1`,
+      args: [username]
+    });
 
-    const user = await db.get<{ id: number }>(userQuery, [username]);
-
-    if (!user) {
+    if (userResult.rows.length === 0) {
       return NextResponse.json(
         { error: 'Usuario no encontrado' },
         { status: 404 }
       );
     }
 
+    const user = userResult.rows[0];
+
     // Obtener los animes del usuario
-    let query = `
+    let sql = `
       SELECT
         a.id,
         a.name,
@@ -95,17 +93,38 @@ export async function GET(
         ua.user_id = ?
     `;
 
-    const params_array: (string | number | null)[] = [user.id];
+    const args: (string | number | null)[] = [user.id as number];
 
     // Aplicar filtro de estado si se proporciona
     if (stateFilter) {
-      query += ' AND ua.state_name = ?';
-      params_array.push(stateFilter);
+      sql += ' AND ua.state_name = ?';
+      args.push(stateFilter);
     }
 
-    query += ' ORDER BY a.year DESC, a.name ASC';
+    sql += ' ORDER BY a.year DESC, a.name ASC';
 
-    const animes = await db.all<UserAnimeRow[]>(query, params_array);
+    const animesResult = await client.execute({
+      sql: sql,
+      args: args
+    });
+
+    // Convertir las filas al formato esperado
+    const animes: UserAnimeRow[] = animesResult.rows.map(row => ({
+      id: row.id as number,
+      name: row.name as string,
+      name_mal: row.name_mal as string | null,
+      season: row.season as string,
+      total_chapters: row.total_chapters as number | null,
+      current_chapter: row.current_chapter as number | null,
+      state_name: row.state_name as string | null,
+      rating_value: row.rating_value as string | null,
+      year: row.year as number,
+      season_name: row.season_name as string | null,
+      image_url: row.image_url as string | null,
+      created_at: row.created_at as string,
+      updated_at: row.updated_at as string,
+      user_id: row.user_id as number
+    }));
 
     console.log('Animes encontrados para usuario', username, ':', animes.length);
 

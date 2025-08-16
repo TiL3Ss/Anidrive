@@ -1,6 +1,6 @@
 // app/api/comments/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../lib/db';
+import { getTursoClient } from '../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]/route';
 
@@ -33,15 +33,15 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const db = await getDb();
+    const client = getTursoClient();
 
     // Verificar que el anime existe en la lista del usuario
-    const userAnime = await db.get(
-      `SELECT * FROM user_animes WHERE user_id = ? AND anime_id = ?`,
-      [userId, animeId]
-    );
+    const userAnimeResult = await client.execute({
+      sql: `SELECT * FROM user_animes WHERE user_id = ? AND anime_id = ?`,
+      args: [userId, animeId]
+    });
 
-    if (!userAnime) {
+    if (userAnimeResult.rows.length === 0) {
       return NextResponse.json({ 
         message: 'No se puede comentar en un anime que no está en la lista del usuario' 
       }, { status: 404 });
@@ -49,12 +49,12 @@ export async function POST(request: Request) {
 
     // Si es una respuesta, verificar que el comentario padre existe
     if (parentCommentId) {
-      const parentComment = await db.get(
-        `SELECT * FROM anime_comments WHERE id = ? AND user_id = ? AND anime_id = ?`,
-        [parentCommentId, userId, animeId]
-      );
+      const parentCommentResult = await client.execute({
+        sql: `SELECT * FROM anime_comments WHERE id = ? AND user_id = ? AND anime_id = ?`,
+        args: [parentCommentId, userId, animeId]
+      });
 
-      if (!parentComment) {
+      if (parentCommentResult.rows.length === 0) {
         return NextResponse.json({ 
           message: 'Comentario padre no encontrado' 
         }, { status: 404 });
@@ -62,22 +62,25 @@ export async function POST(request: Request) {
     }
 
     // Crear el comentario
-    const result = await db.run(
-      `INSERT INTO anime_comments (user_id, anime_id, commenter_id, parent_comment_id, content)
-       VALUES (?, ?, ?, ?, ?)`,
-      [userId, animeId, session.user.id, parentCommentId || null, content.trim()]
-    );
+    const result = await client.execute({
+      sql: `INSERT INTO anime_comments (user_id, anime_id, commenter_id, parent_comment_id, content)
+           VALUES (?, ?, ?, ?, ?)`,
+      args: [userId, animeId, session.user.id, parentCommentId || null, content.trim()]
+    });
 
     // Obtener el comentario creado con información del usuario
-    const newComment = await db.get(`
-      SELECT 
-        c.*,
-        u.username as commenter_name,
-        NULL as commenter_image
-      FROM anime_comments c
-      JOIN users u ON c.commenter_id = u.id
-      WHERE c.id = ?
-    `, [result.lastID]);
+    const newCommentResult = await client.execute({
+      sql: `SELECT 
+              c.*,
+              u.username as commenter_name,
+              NULL as commenter_image
+            FROM anime_comments c
+            JOIN users u ON c.commenter_id = u.id
+            WHERE c.id = ?`,
+      args: [result.lastInsertRowid]
+    });
+
+    const newComment = newCommentResult.rows[0];
 
     return NextResponse.json({
       message: 'Comentario creado exitosamente',
@@ -116,22 +119,25 @@ export async function GET(request: Request) {
   }
 
   try {
-    const db = await getDb();
+    const client = getTursoClient();
 
     // Obtener comentarios principales (sin parent_comment_id) con información del usuario y votos
-    const comments = await db.all(`
-      SELECT 
-        c.*,
-        u.username as commenter_name,
-        NULL as commenter_image,
-        COALESCE(cv.vote_type, 0) as user_vote,
-        (SELECT COUNT(*) FROM anime_comments WHERE parent_comment_id = c.id) as reply_count
-      FROM anime_comments c
-      JOIN users u ON c.commenter_id = u.id
-      LEFT JOIN comment_votes cv ON c.id = cv.comment_id AND cv.user_id = ?
-      WHERE c.user_id = ? AND c.anime_id = ? AND c.parent_comment_id IS NULL
-      ORDER BY c.created_at DESC
-    `, [session.user.id, userId, animeId]);
+    const commentsResult = await client.execute({
+      sql: `SELECT 
+              c.*,
+              u.username as commenter_name,
+              NULL as commenter_image,
+              COALESCE(cv.vote_type, 0) as user_vote,
+              (SELECT COUNT(*) FROM anime_comments WHERE parent_comment_id = c.id) as reply_count
+            FROM anime_comments c
+            JOIN users u ON c.commenter_id = u.id
+            LEFT JOIN comment_votes cv ON c.id = cv.comment_id AND cv.user_id = ?
+            WHERE c.user_id = ? AND c.anime_id = ? AND c.parent_comment_id IS NULL
+            ORDER BY c.created_at DESC`,
+      args: [session.user.id, userId, animeId]
+    });
+
+    const comments = commentsResult.rows;
 
     return NextResponse.json({ comments });
 
