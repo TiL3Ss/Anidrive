@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="baseDatos.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="1"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="3680"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="users" custom_title="0" dock_id="1" table="4,5:mainusers"/><dock_state state="000000ff00000000fd00000001000000020000058100000390fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000005810000011e00ffffff000002690000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="animes" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="35"/><column index="2" value="40"/><column index="3" value="68"/><column index="4" value="48"/><column index="5" value="92"/><column index="6" value="101"/><column index="7" value="57"/><column index="8" value="51"/><column index="9" value="35"/><column index="10" value="67"/><column index="11" value="65"/><column index="12" value="71"/><column index="13" value="74"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="users" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="35"/><column index="2" value="65"/><column index="3" value="62"/><column index="4" value="39"/><column index="5" value="71"/><column index="6" value="74"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">-- Script para crear la base de datos de animes en SQLite
+
+-- Tabla para los estados de visualización de animes
+CREATE TABLE states_view (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(15) NOT NULL UNIQUE CHECK (name IN ('Viendo', 'Pendiente', 'Terminado', 'Coming soon', 'Dropeado'))
+);
+
+-- Tabla para las calificaciones de animes
+CREATE TABLE ratings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol VARCHAR(2) NOT NULL UNIQUE CHECK (symbol IN ('1★', '2★', '3★', '4★', '5★'))
+);
+
+-- Tabla para las estaciones del año
+CREATE TABLE seasons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(9) NOT NULL UNIQUE CHECK (name IN ('Invierno', 'Primavera', 'Verano', 'Otoño'))
+);
+
+-- Tabla principal de animes
+CREATE TABLE animes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(50) NOT NULL,
+    name_mal VARCHAR(100) NOT NULL,
+    season VARCHAR(5) NOT NULL,
+    total_chapters SMALLINT,
+    current_chapter SMALLINT,
+    state_id INTEGER REFERENCES states_view(id) ON DELETE SET NULL,
+    rate_id INTEGER REFERENCES ratings(id) ON DELETE SET NULL,
+    year SMALLINT NOT NULL CHECK (year BETWEEN 1900 AND 2100),
+    season_id INTEGER REFERENCES seasons(id) ON DELETE SET NULL,
+    image_url VARCHAR(255),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabla para los usuarios
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username VARCHAR(30) NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Triggers para actualizar automáticamente 'updated_at' en SQLite
+
+-- Trigger para la tabla 'animes'
+CREATE TRIGGER trg_animes_updated_at
+AFTER UPDATE ON animes
+FOR EACH ROW
+BEGIN
+    UPDATE animes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+-- Trigger para la tabla 'users'
+CREATE TRIGGER trg_users_updated_at
+AFTER UPDATE ON users
+FOR EACH ROW
+BEGIN
+    UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;</sql><current_tab id="0"/></tab_sql></sqlb_project>

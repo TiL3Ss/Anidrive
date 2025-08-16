@@ -1,0 +1,19 @@
+
+@import "tailwindcss";
+/* styles/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles if needed beyond Tailwind */
+/* For example, for precise bubble positioning or animations */
+
+/* For react-slick dots */
+.slick-dots li button:before {
+  font-size: 10px;
+  color: #a0aec0; /* Tailwind gray-400 */
+}
+
+.slick-dots li.slick-active button:before {
+  color: #4299e1; /* Tailwind blue-500 */
+}
