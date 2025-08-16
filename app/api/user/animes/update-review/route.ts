@@ -1,6 +1,6 @@
 // app/api/user/animes/update-review/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../lib/db';
+import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 
@@ -19,27 +19,27 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const db = await getDb();
+    const client = getTursoClient();
 
     // Verificar que el anime existe para este usuario
-    const existingRecord = await db.get(
-      `SELECT id FROM user_animes WHERE user_id = ? AND anime_id = ?`,
-      [userId, animeId]
-    );
+    const existingRecordResult = await client.execute({
+      sql: `SELECT id FROM user_animes WHERE user_id = ? AND anime_id = ?`,
+      args: [userId, animeId]
+    });
 
-    if (!existingRecord) {
+    if (existingRecordResult.rows.length === 0) {
       return NextResponse.json({ message: 'No se encontró el anime para este usuario.' }, { status: 404 });
     }
 
     // Actualizar solo la review
-    const result = await db.run(
-      `UPDATE user_animes
-       SET review = ?
-       WHERE user_id = ? AND anime_id = ?`,
-      [review.trim() || null, userId, animeId]
-    );
+    const result = await client.execute({
+      sql: `UPDATE user_animes
+           SET review = ?
+           WHERE user_id = ? AND anime_id = ?`,
+      args: [review.trim() || null, userId, animeId]
+    });
 
-    if (result.changes === 0) {
+    if (result.rowsAffected === 0) {
       return NextResponse.json({ message: 'No se pudo actualizar la review.' }, { status: 404 });
     }
 

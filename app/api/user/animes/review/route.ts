@@ -1,6 +1,6 @@
 // app/api/user/animes/review/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../lib/db';
+import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 
@@ -23,20 +23,22 @@ export async function GET(request: Request) {
   const targetUserId = userId ? parseInt(userId) : session.user.id;
 
   try {
-    const db = await getDb();
+    const client = getTursoClient();
 
     // Obtener la review del usuario especificado para este anime
-    const result = await db.get(
-      `SELECT review FROM user_animes WHERE user_id = ? AND anime_id = ?`,
-      [targetUserId, parseInt(animeId)]
-    );
+    const result = await client.execute({
+      sql: `SELECT review FROM user_animes WHERE user_id = ? AND anime_id = ?`,
+      args: [targetUserId, parseInt(animeId)]
+    });
 
-    if (!result) {
+    if (result.rows.length === 0) {
       return NextResponse.json({ message: 'No se encontró el anime para este usuario.' }, { status: 404 });
     }
 
+    const reviewData = result.rows[0];
+
     return NextResponse.json({ 
-      review: result.review 
+      review: reviewData.review 
     });
 
   } catch (error: any) {

@@ -1,6 +1,6 @@
 // app/api/user/animes/search/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../lib/db';
+import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 
@@ -65,22 +65,22 @@ export async function GET(request: Request) {
         // Si se proporciona userId, usar ese; si no, usar el del usuario actual (sesión)
         const userId = targetUserId ? parseInt(targetUserId) : session.user.id;
 
-        const db = await getDb();
+        const client = getTursoClient();
 
         // Verificar que el usuario objetivo existe (solo si es diferente al usuario actual)
         if (targetUserId && parseInt(targetUserId) !== session.user.id) {
-            const userExists = await db.get(
-                'SELECT id FROM users WHERE id = ?',
-                [userId]
-            );
+            const userExistsResult = await client.execute({
+                sql: 'SELECT id FROM users WHERE id = ?',
+                args: [userId]
+            });
             
-            if (!userExists) {
+            if (userExistsResult.rows.length === 0) {
                 return NextResponse.json({ message: 'Usuario no encontrado' }, { status: 404 });
             }
         }
 
         // Construir consulta SQL
-        let query = `
+        let sql = `
             SELECT
                 a.id,
                 a.name,
@@ -104,43 +104,43 @@ export async function GET(request: Request) {
                 ua.user_id = ?
         `;
         
-        const params: (string | number)[] = [userId];
+        const args: (string | number)[] = [userId];
 
         // Filtros
         if (searchQuery) {
-            query += ' AND (a.name LIKE ? OR a.name_mal LIKE ?)';
-            params.push(`%${searchQuery}%`, `%${searchQuery}%`);
+            sql += ' AND (a.name LIKE ? OR a.name_mal LIKE ?)';
+            args.push(`%${searchQuery}%`, `%${searchQuery}%`);
         }
 
         if (stateFilter) {
-            query += ' AND ua.state_name = ?';
-            params.push(stateFilter);
+            sql += ' AND ua.state_name = ?';
+            args.push(stateFilter);
         }
 
         if (yearFilter) {
-            query += ' AND a.year = ?';
-            params.push(parseInt(yearFilter));
+            sql += ' AND a.year = ?';
+            args.push(parseInt(yearFilter));
         }
 
         if (seasonFilter) {
-            query += ' AND a.season_name = ?';
-            params.push(seasonFilter);
+            sql += ' AND a.season_name = ?';
+            args.push(seasonFilter);
         }
 
         if (ratingFilter) {
             const ratingValue = parseFloat(ratingFilter);
             switch (ratingOp) {
                 case 'gte':
-                    query += ' AND CAST(ua.rating_value AS REAL) >= ?';
+                    sql += ' AND CAST(ua.rating_value AS REAL) >= ?';
                     break;
                 case 'lte':
-                    query += ' AND CAST(ua.rating_value AS REAL) <= ?';
+                    sql += ' AND CAST(ua.rating_value AS REAL) <= ?';
                     break;
                 case 'eq':
-                    query += ' AND CAST(ua.rating_value AS REAL) = ?';
+                    sql += ' AND CAST(ua.rating_value AS REAL) = ?';
                     break;
             }
-            params.push(ratingValue);
+            args.push(ratingValue);
         }
 
         // Ordenamiento
@@ -162,60 +162,85 @@ export async function GET(request: Request) {
                 orderByClause = 'a.name';
         }
         
-        query += ` ORDER BY ${orderByClause} ${sortOrder === 'DESC' ? 'DESC' : 'ASC'}`;
+        sql += ` ORDER BY ${orderByClause} ${sortOrder === 'DESC' ? 'DESC' : 'ASC'}`;
 
         // Paginación
-        query += ' LIMIT ? OFFSET ?';
-        params.push(limit, offset);
+        sql += ' LIMIT ? OFFSET ?';
+        args.push(limit, offset);
 
         // Consulta para los resultados
-        const animes = await db.all<AnimeRow[]>(query, params);
+        const animesResult = await client.execute({
+            sql: sql,
+            args: args
+        });
 
         // Consulta para el total (sin paginación)
-        let countQuery = `
+        let countSql = `
             SELECT COUNT(*) as total
             FROM animes a
             JOIN user_animes ua ON a.id = ua.anime_id
             WHERE ua.user_id = ?
         `;
         
-        const countParams: (string | number)[] = [userId];
+        const countArgs: (string | number)[] = [userId];
         
         // Aplicar los mismos filtros que en la consulta principal
         if (searchQuery) {
-            countQuery += ' AND (a.name LIKE ? OR a.name_mal LIKE ?)';
-            countParams.push(`%${searchQuery}%`, `%${searchQuery}%`);
+            countSql += ' AND (a.name LIKE ? OR a.name_mal LIKE ?)';
+            countArgs.push(`%${searchQuery}%`, `%${searchQuery}%`);
         }
         if (stateFilter) {
-            countQuery += ' AND ua.state_name = ?';
-            countParams.push(stateFilter);
+            countSql += ' AND ua.state_name = ?';
+            countArgs.push(stateFilter);
         }
         if (yearFilter) {
-            countQuery += ' AND a.year = ?';
-            countParams.push(parseInt(yearFilter));
+            countSql += ' AND a.year = ?';
+            countArgs.push(parseInt(yearFilter));
         }
         if (seasonFilter) {
-            countQuery += ' AND a.season_name = ?';
-            countParams.push(seasonFilter);
+            countSql += ' AND a.season_name = ?';
+            countArgs.push(seasonFilter);
         }
         if (ratingFilter) {
             const ratingValue = parseFloat(ratingFilter);
             switch (ratingOp) {
                 case 'gte':
-                    countQuery += ' AND CAST(ua.rating_value AS REAL) >= ?';
+                    countSql += ' AND CAST(ua.rating_value AS REAL) >= ?';
                     break;
                 case 'lte':
-                    countQuery += ' AND CAST(ua.rating_value AS REAL) <= ?';
+                    countSql += ' AND CAST(ua.rating_value AS REAL) <= ?';
                     break;
                 case 'eq':
-                    countQuery += ' AND CAST(ua.rating_value AS REAL) = ?';
+                    countSql += ' AND CAST(ua.rating_value AS REAL) = ?';
                     break;
             }
-            countParams.push(ratingValue);
+            countArgs.push(ratingValue);
         }
 
-        const totalResult = await db.get<{ total: number }>(countQuery, countParams);
-        const total = totalResult?.total || 0;
+        const totalResult = await client.execute({
+            sql: countSql,
+            args: countArgs
+        });
+        
+        const total = totalResult.rows[0]?.total as number || 0;
+
+        // Convertir las filas al formato esperado
+        const animes: AnimeRow[] = animesResult.rows.map(row => ({
+            id: row.id as number,
+            name: row.name as string,
+            name_mal: row.name_mal as string | null,
+            season: row.season as string,
+            total_chapters: row.total_chapters as number | null,
+            current_chapter: row.current_chapter as number | null,
+            state_name: row.state_name as string | null,
+            rating_value: row.rating_value as string | null,
+            year: row.year as number,
+            season_name: row.season_name as string | null,
+            image_url: row.image_url as string | null,
+            created_at: row.created_at as string,
+            updated_at: row.updated_at as string,
+            user_id: row.user_id as number
+        }));
 
         // Formatear respuesta
         return NextResponse.json({

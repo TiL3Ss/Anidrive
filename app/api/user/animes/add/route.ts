@@ -1,6 +1,6 @@
 // app/api/user/animes/add/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../lib/db';
+import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     stateId,
     rateId,
     seasonId,
-    review, // ¡Añadimos el campo review aquí!
+    review,
   } = await request.json();
 
   if (!animeName || !year || !seasonCour || !stateId || !seasonId) {
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const db = await getDb();
+    const client = getTursoClient();
 
     const stateName = STATES_VIEW_OPTIONS.find(s => s.id === stateId)?.name || null;
     const ratingValue = RATINGS_OPTIONS.find(r => r.id === rateId)?.value || null;
@@ -84,53 +84,53 @@ export async function POST(request: Request) {
     const imageUrl = searchData.image_url;
 
     // 3. Guardar en la base de datos (parte de animes)
-    const anime = await db.get(
-      'SELECT id, image_url FROM animes WHERE LOWER(name) = ? AND LOWER(season) = ? AND year = ?',
-      [animeName.toLowerCase(), seasonCour.toLowerCase(), year]
-    );
+    const animeResult = await client.execute({
+      sql: 'SELECT id, image_url FROM animes WHERE LOWER(name) = ? AND LOWER(season) = ? AND year = ?',
+      args: [animeName.toLowerCase(), seasonCour.toLowerCase(), year]
+    });
 
     let animeId;
 
-    if (!anime) {
+    if (animeResult.rows.length === 0) {
       // Insertar nuevo anime con todos los datos
-      const result = await db.run(
-        `INSERT INTO animes (name, name_mal, season, total_chapters, year, season_name, image_url)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [animeName, malTitle, seasonCour, totalChapters, year, seasonName, imageUrl]
-      );
-      animeId = result.lastID;
+      const insertResult = await client.execute({
+        sql: `INSERT INTO animes (name, name_mal, season, total_chapters, year, season_name, image_url)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        args: [animeName, malTitle, seasonCour, totalChapters, year, seasonName, imageUrl]
+      });
+      animeId = insertResult.lastInsertRowid;
     } else {
       // Actualizar anime existente
+      const anime = animeResult.rows[0];
       animeId = anime.id;
       // Solo actualizar image_url si no existe o si tenemos una nueva
       const finalImageUrl = anime.image_url || imageUrl;
-      await db.run(
-        `UPDATE animes 
-          SET name_mal = ?, image_url = ?
-          WHERE id = ?`,
-        [malTitle, finalImageUrl, animeId]
-      );
+      await client.execute({
+        sql: `UPDATE animes 
+              SET name_mal = ?, image_url = ?
+              WHERE id = ?`,
+        args: [malTitle, finalImageUrl, animeId]
+      });
     }
 
     // 4. Verificar si el usuario ya tiene este anime
-    const userAnimeExists = await db.get(
-      'SELECT id FROM user_animes WHERE user_id = ? AND anime_id = ?',
-      [userId, animeId]
-    );
+    const userAnimeExistsResult = await client.execute({
+      sql: 'SELECT id FROM user_animes WHERE user_id = ? AND anime_id = ?',
+      args: [userId, animeId]
+    });
 
-    if (userAnimeExists) {
+    if (userAnimeExistsResult.rows.length > 0) {
       return NextResponse.json({
         message: 'Este anime ya ha sido añadido a tu Drive.'
       }, { status: 409 });
     }
 
-    // 5. Insertar relación usuario-anime, ¡incluyendo la reseña!
-    // SQLite automáticamente manejará 'null' si `review` es null o undefined
-    await db.run(
-      `INSERT INTO user_animes (user_id, anime_id, current_chapter, state_name, rating_value, review)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-      [userId, animeId, currentChapter, stateName, ratingValue, review] // Se pasa review directamente
-    );
+    // 5. Insertar relación usuario-anime, incluyendo la reseña
+    await client.execute({
+      sql: `INSERT INTO user_animes (user_id, anime_id, current_chapter, state_name, rating_value, review)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [userId, animeId, currentChapter, stateName, ratingValue, review]
+    });
 
     return NextResponse.json({
       message: 'Anime añadido con éxito',
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('Error adding anime for user:', error);
-    if (error.message && error.message.includes('SQLITE_CONSTRAINT')) {
+    if (error.message && error.message.includes('UNIQUE constraint failed')) {
       return NextResponse.json({
         message: 'Error de base de datos: Posible duplicado de anime o asociación de usuario.'
       }, { status: 409 });

@@ -1,6 +1,6 @@
 // app/api/user/animes/update/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../lib/db';
+import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 
@@ -33,7 +33,7 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const db = await getDb();
+    const client = getTursoClient();
 
     // Mapear IDs a nombres/valores para almacenar en la DB
     const stateName = STATES_VIEW_OPTIONS.find(s => s.id === stateId)?.name || null;
@@ -43,15 +43,14 @@ export async function PUT(request: Request) {
         return NextResponse.json({ message: 'Valor de estado inválido.' }, { status: 400 });
     }
 
-   
-    const result = await db.run(
-      `UPDATE user_animes
-       SET current_chapter = ?, state_name = ?, rating_value = ?
-       WHERE user_id = ? AND anime_id = ?`,
-      [currentChapter, stateName, ratingValue, userId, animeId]
-    );
+    const result = await client.execute({
+      sql: `UPDATE user_animes
+           SET current_chapter = ?, state_name = ?, rating_value = ?
+           WHERE user_id = ? AND anime_id = ?`,
+      args: [currentChapter, stateName, ratingValue, userId, animeId]
+    });
 
-    if (result.changes === 0) {
+    if (result.rowsAffected === 0) {
       return NextResponse.json({ message: 'No se encontró el anime para actualizar o no hubo cambios.' }, { status: 404 });
     }
 

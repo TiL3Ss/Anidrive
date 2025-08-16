@@ -1,6 +1,6 @@
 // app/api/user/animes/recommend/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../../lib/db';
+import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 
@@ -23,9 +23,13 @@ export async function GET(request: Request) {
     console.log('GET /api/user/animes/recommend: Usando userId de parámetros:', targetUserId);
     
     // Verificar que el userId proporcionado existe (opcional, para seguridad)
-    const db = await getDb();
-    const userExists = await db.get('SELECT id FROM users WHERE id = ?', [targetUserId]);
-    if (!userExists) {
+    const client = getTursoClient();
+    const userExistsResult = await client.execute({
+      sql: 'SELECT id FROM users WHERE id = ?',
+      args: [targetUserId]
+    });
+    
+    if (userExistsResult.rows.length === 0) {
       console.warn('GET /api/user/animes/recommend: Usuario no encontrado:', targetUserId);
       return NextResponse.json({ message: 'Usuario no encontrado' }, { status: 404 });
     }
@@ -36,29 +40,31 @@ export async function GET(request: Request) {
   }
 
   try {
-    const db = await getDb();
+    const client = getTursoClient();
 
     console.log('GET /api/user/animes/recommend: Buscando recomendaciones para userId:', targetUserId);
 
-    const recommendedAnimes = await db.all(
-      `SELECT
-         a.id,
-         a.name as title,
-         a.image_url as imageUrl,
-         a.season as seasonCour,
-         a.year,
-         a.total_chapters as totalChapters,
-         ua.current_chapter as currentEpisode,
-         ua.state_name as state,
-         ua.rating_value as rating,
-         ua.recommended,
-         a.season_name as season
-       FROM animes a
-       JOIN user_animes ua ON a.id = ua.anime_id
-       WHERE ua.user_id = ? AND ua.recommended = true
-       ORDER BY a.name ASC`,
-      [targetUserId]
-    );
+    const recommendedAnimesResult = await client.execute({
+      sql: `SELECT
+             a.id,
+             a.name as title,
+             a.image_url as imageUrl,
+             a.season as seasonCour,
+             a.year,
+             a.total_chapters as totalChapters,
+             ua.current_chapter as currentEpisode,
+             ua.state_name as state,
+             ua.rating_value as rating,
+             ua.recommended,
+             a.season_name as season
+           FROM animes a
+           JOIN user_animes ua ON a.id = ua.anime_id
+           WHERE ua.user_id = ? AND ua.recommended = true
+           ORDER BY a.name ASC`,
+      args: [targetUserId]
+    });
+
+    const recommendedAnimes = recommendedAnimesResult.rows;
 
     console.log('GET /api/user/animes/recommend: Recomendaciones encontradas:', recommendedAnimes.length, 'para usuario:', targetUserId);
 
@@ -92,14 +98,14 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const db = await getDb();
+    const client = getTursoClient();
 
-    const existingRecord = await db.get(
-      'SELECT id FROM user_animes WHERE user_id = ? AND anime_id = ?',
-      [userId, animeId]
-    );
+    const existingRecordResult = await client.execute({
+      sql: 'SELECT id FROM user_animes WHERE user_id = ? AND anime_id = ?',
+      args: [userId, animeId]
+    });
 
-    if (!existingRecord) {
+    if (existingRecordResult.rows.length === 0) {
       return NextResponse.json(
         { message: 'No se encontró el anime en tu lista' },
         { status: 404 }
@@ -108,14 +114,14 @@ export async function PUT(request: Request) {
 
     console.log('PUT /api/user/animes/recommend: Actualizando recomendación para anime:', animeId, 'usuario:', userId, 'recomendado:', recommended);
 
-    const result = await db.run(
-      `UPDATE user_animes
-         SET recommended = ?
-         WHERE user_id = ? AND anime_id = ?`,
-      [recommended, userId, animeId]
-    );
+    const result = await client.execute({
+      sql: `UPDATE user_animes
+             SET recommended = ?
+             WHERE user_id = ? AND anime_id = ?`,
+      args: [recommended, userId, animeId]
+    });
 
-    if (result.changes === 0) {
+    if (result.rowsAffected === 0) {
       return NextResponse.json(
         { message: 'No se realizaron cambios' },
         { status: 200 }
