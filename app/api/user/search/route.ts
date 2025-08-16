@@ -1,6 +1,6 @@
 // app/api/user/search/route.ts
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../lib/db';
+import { getTursoClient } from '../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../auth/[...nextauth]/route';
 
@@ -36,8 +36,8 @@ export async function GET(request: Request) {
       });
     }
 
-    // Conectar a la base de datos SQLite
-    const db = await getDb();
+    // Conectar a la base de datos Turso
+    const client = getTursoClient();
     
     const searchTerm = query.trim();
     let users: UserRow[] = [];
@@ -58,64 +58,91 @@ export async function GET(request: Request) {
       
       console.log('Buscando con username:', usernameQuery, 'y tag:', tagQuery);
       
-      let sqlQuery = `
+      let sql = `
         SELECT username, tag, email 
         FROM users 
         WHERE LOWER(username) LIKE ? AND LOWER(tag) LIKE ?
       `;
-      const params: (string)[] = [`%${usernameQuery}%`, `%${tagQuery}%`];
+      const args: (string)[] = [`%${usernameQuery}%`, `%${tagQuery}%`];
       
       if (currentUserEmail) {
-        sqlQuery += ' AND email != ?';
-        params.push(currentUserEmail);
+        sql += ' AND email != ?';
+        args.push(currentUserEmail);
       }
       
-      sqlQuery += ' ORDER BY username ASC LIMIT 10';
+      sql += ' ORDER BY username ASC LIMIT 10';
       
-      users = await db.all<UserRow[]>(sqlQuery, params);
+      const result = await client.execute({
+        sql: sql,
+        args: args
+      });
+      
+      users = result.rows.map(row => ({
+        username: row.username as string,
+        tag: row.tag as string,
+        email: row.email as string
+      }));
       
     } else {
       // Buscar solo por username
       const searchTermLower = searchTerm.toLowerCase();
       console.log('Buscando username:', searchTermLower);
       
-      let sqlQuery = `
+      let sql = `
         SELECT username, tag, email 
         FROM users 
         WHERE LOWER(username) LIKE ?
       `;
-      const params: (string)[] = [`%${searchTermLower}%`];
+      const args: (string)[] = [`%${searchTermLower}%`];
       
       if (currentUserEmail) {
-        sqlQuery += ' AND email != ?';
-        params.push(currentUserEmail);
+        sql += ' AND email != ?';
+        args.push(currentUserEmail);
       }
       
-      sqlQuery += ' ORDER BY username ASC LIMIT 10';
+      sql += ' ORDER BY username ASC LIMIT 10';
       
-      users = await db.all<UserRow[]>(sqlQuery, params);
+      const result = await client.execute({
+        sql: sql,
+        args: args
+      });
+      
+      users = result.rows.map(row => ({
+        username: row.username as string,
+        tag: row.tag as string,
+        email: row.email as string
+      }));
     }
 
     // Si no se encontraron resultados y no hay #, también buscar en la concatenación username+tag
     if (users.length === 0 && !searchTerm.includes('#')) {
       console.log('Búsqueda secundaria en username+tag concatenado');
       
-      let sqlQuery = `
+      let sql = `
         SELECT username, tag, email 
         FROM users 
         WHERE LOWER(username || tag) LIKE ?
       `;
       const searchTermLower = searchTerm.toLowerCase();
-      const params: (string)[] = [`%${searchTermLower}%`];
+      const args: (string)[] = [`%${searchTermLower}%`];
       
       if (currentUserEmail) {
-        sqlQuery += ' AND email != ?';
-        params.push(currentUserEmail);
+        sql += ' AND email != ?';
+        args.push(currentUserEmail);
       }
       
-      sqlQuery += ' ORDER BY username ASC LIMIT 10';
+      sql += ' ORDER BY username ASC LIMIT 10';
       
-      users = await db.all<UserRow[]>(sqlQuery, params);
+      const result = await client.execute({
+        sql: sql,
+        args: args
+      });
+      
+      users = result.rows.map(row => ({
+        username: row.username as string,
+        tag: row.tag as string,
+        email: row.email as string
+      }));
     }
 
     console.log('Usuarios encontrados:', users.length);
