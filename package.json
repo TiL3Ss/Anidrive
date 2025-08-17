@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@firecms/neat": "^0.4.0",
     "@heroicons/react": "^2.2.0",
     "@libsql/client": "^0.15.11",
     "@libsql/core": "^0.15.11",
@@ -31,7 +32,6 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "swiper": "^11.2.10",
-    "three": "^0.179.1",
     "tsparticles": "^3.8.1",
     "vanta": "^0.5.24"
   },
