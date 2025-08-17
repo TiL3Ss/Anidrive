@@ -2,22 +2,21 @@
 "use client";
 
 import { NeatGradient } from "@firecms/neat";
-import { useRef, useEffect } from "react";
+import { useEffect, useRef } from "react";
 
-export default function AnimatedBlobBackground() {
+export default function OceanicBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     if (canvasRef.current) {
-      // Inicializa el gradiente Oceanic
       const gradient = new NeatGradient({
         ref: canvasRef.current,
         colors: [
-          { color: "#3A7BD5", enabled: true }, // azul
-          { color: "#00d2ff", enabled: true }, // celeste
-          { color: "#004e92", enabled: true }, // azul profundo
+          { color: "#3A7BD5", enabled: true }, // Azul
+          { color: "#00d2ff", enabled: true }, // Celeste
+          { color: "#004e92", enabled: true }, // Azul profundo
         ],
-        speed: 3, // velocidad de animación
+        speed: 3,
         horizontalTilt: true,
         verticalTilt: true,
       });

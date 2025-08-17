@@ -7,7 +7,7 @@ import Header from './components/Header';
 import LoginModal from './components/LoginModal';
 import RegisterModal from './components/RegisterModal';
 import ProfilePage from './profile/[username]/page';
-import AnimatedBlobBackground from './components/AnimatedBlobBackground';
+import OceanicBackground from './components/OceanicBackground';
 import { useSession, signOut } from 'next-auth/react';
 
 export default function Home() {
@@ -73,7 +73,8 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden bg-gray-900">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+    <OceanicBackground />
       <Head>
         <title>Anime Organizer</title>
         <meta name="description" content="Organiza tus series y animes vistos" />
@@ -113,7 +114,6 @@ export default function Home() {
         </div>
       </main>
 
-      <AnimatedBlobBackground />
 
       {showLoginModal && (
         <LoginModal
