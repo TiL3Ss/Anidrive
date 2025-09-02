@@ -159,7 +159,7 @@ export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLo
         {/* Logo */}
             <div className="relative">
               <Image
-                src="/images/fondo.png"
+                src="/images/logo_O.png"
                 alt="AniDrive Logo"
                 width={40}
                 height={40}
