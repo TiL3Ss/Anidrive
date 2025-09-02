@@ -101,13 +101,13 @@ export default function Home() {
         <div className="space-x-4">
           <button
             onClick={() => setShowRegisterModal(true)}
-            className="bg-gradient-to-b from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-full text-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform"
+            className="cursor-pointer bg-gradient-to-b from-blue-600 to-blue-700 text-white px-6 py-2.5 rounded-full text-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform"
           >
             Regístrate Ahora
           </button>
           <button
             onClick={() => setShowLoginModal(true)}
-            className="border-2 border-blue-200 text-blue-200 px-5 py-2 rounded-full text-base font-semibold hover:bg-blue-900/10 hover:border-blue-100 hover:text-blue-100 transition-all duration-300 shadow-sm hover:shadow-md"
+            className="cursor-pointer border-2 border-white text-white px-5 py-2 rounded-full text-base font-semibold  hover:border-blue-800 hover:text-blue-800  transition-all duration-300 shadow-sm hover:shadow-md"
           >
             Ya tengo cuenta
           </button>

@@ -155,16 +155,21 @@ export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLo
       }
       py-3 px-6 flex justify-between items-center
     `}>
-      {/* Logo y marca */}
       <div className="flex items-center space-x-3">
-        <div className="w-9 h-9 relative overflow-hidden rounded-2xl shadow-sm"> 
-          <Image
-            src="/images/fondo.png"
-            alt="Logo FT"
-            fill
-            className="object-contain"
-          />
-        </div>
+        {/* Logo */}
+            <div className="relative">
+              <Image
+                src="/images/fondo.png"
+                alt="AniDrive Logo"
+                width={40}
+                height={40}
+                className="
+                  rounded-xl object-contain transition-all duration-300
+                  hover:drop-shadow-lg p-2
+                "
+                priority
+              />
+            </div>
         <Link href="/">
           <span className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
             AniDrive
@@ -178,13 +183,13 @@ export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLo
           <div className="relative w-80" ref={searchRef}>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <MagnifyingGlassIcon className="h-4 w-4 text-slate-400" />
+                <MagnifyingGlassIcon className="h-4 w-4 text-white" />
               </div>
               <input
                 type="text"
                 value={searchQuery}
                 onChange={handleSearchInputChange}
-                placeholder="Buscar usuarios"
+                placeholder="Buscar usuarios "
                 className={`
                   w-full pl-11 pr-10 py-2.5 text-sm text-slate-200
                   bg-slate-700/70 backdrop-blur-sm
@@ -355,7 +360,7 @@ export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLo
               <button
                 onClick={onLoginClick}
                 className={`
-                  px-6 py-2.5 rounded-2xl font-semibold text-sm
+                  cursor-pointer px-6 py-2.5 rounded-2xl font-semibold text-sm
                   bg-slate-700/70 text-slate-300 border border-slate-600/50
                   hover:bg-slate-600/80 hover:border-slate-500/50 hover:text-slate-200
                   backdrop-blur-sm
@@ -369,7 +374,7 @@ export default function Header({ onLoginClick, onRegisterClick, isLoggedIn, onLo
               <button
                 onClick={onRegisterClick}
                 className={`
-                  px-6 py-2.5 rounded-2xl font-semibold text-sm text-white
+                  cursor-pointer px-6 py-2.5 rounded-2xl font-semibold text-sm text-white
                   bg-gradient-to-r from-cyan-500 to-blue-600
                   hover:from-cyan-400 hover:to-blue-500
                   transition-all duration-200 ease-in-out
