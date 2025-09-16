@@ -17,14 +17,13 @@ import DELAnimeModal from '../../components/DelAnimeModal';
 import AnimeMain from '../../components/AnimeMain';
 import AnimeSearchModal from '../../components/SearchAnimeModal';
 
-// Refactored Components
 import { ProfileHeader } from '../../components/ProfileHeader';
 import { ProfileLoadingState } from '../../components/ProfileLoadingState';
 import { ProfileNotFound } from '../../components/ProfileNotFound';
 import { WatchingSection } from '../../components/WatchingSection';
 import { DriveSection } from '../../components/DriveSection';
 
-// Custom Hooks
+//Hooks
 import { useProfile } from '../../hooks/useProfile';
 import { useAnimeData } from '../../hooks/useAnimeData';
 import { useModals } from '../../hooks/useModals';
@@ -183,7 +182,7 @@ export default function DynamicProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Head>
         <title>{isOwnProfile ? 'Mi Perfil' : `Perfil de ${profileUser.username}`} - AnimeDrive</title>
       </Head>
