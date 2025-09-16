@@ -201,146 +201,188 @@ export default function DynamicProfilePage() {
           userImage={session?.user?.image}
         />
         
-        <div className="container mx-auto px-4 py-8 pt-24 bg-gray-50">
+        {/* Container principal con padding responsivo */}
+        <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 pt-16 sm:pt-20 lg:pt-24 bg-gray-50">
+          
+          {/* Vista principal del drive */}
           {viewState === 'drive' && (
-            <>
-              <RecommendationsBanner 
-                userAnimes={allUserAnimes} 
-                onAnimeClick={handleRecommendationClick}
-                isOwnProfile={isOwnProfile}
-                profileUsername={profileUser.username}
-                profileUserId={profileUser.id}
-              />
+            <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+              {/* Banner de recomendaciones */}
+              <div className="w-full">
+                <RecommendationsBanner 
+                  userAnimes={allUserAnimes} 
+                  onAnimeClick={handleRecommendationClick}
+                  isOwnProfile={isOwnProfile}
+                  profileUsername={profileUser.username}
+                  profileUserId={profileUser.id}
+                />
+              </div>
               
-              <WatchingSection
-                isOwnProfile={isOwnProfile}
-                profileUsername={profileUser.username}
-                animesWatching={animesWatching}
-                onAnimeClick={(anime) => handleWatchingAnimeClick(anime, findAnimeInDriveData)}
-                onAddAnimeClick={() => setShowAddAnimeModal(true)}
-                onSearchClick={() => setShowSearchAnimeModal(true)}
-              />
+              {/* Sección de animes viendo */}
+              <div className="w-full">
+                <WatchingSection
+                  isOwnProfile={isOwnProfile}
+                  profileUsername={profileUser.username}
+                  animesWatching={animesWatching}
+                  onAnimeClick={(anime) => handleWatchingAnimeClick(anime, findAnimeInDriveData)}
+                  onAddAnimeClick={() => setShowAddAnimeModal(true)}
+                  onSearchClick={() => setShowSearchAnimeModal(true)}
+                />
+              </div>
 
-              <DriveSection
-                isOwnProfile={isOwnProfile}
-                profileUsername={profileUser.username}
-                driveData={driveData}
-                onSeasonClick={(seasonData) => {
-                  setSelectedSeason(seasonData);
-                  setViewState('season');
-                }}
-                onAnimeClick={(animeData) => {
-                  setSelectedAnime(animeData);
-                  setCameFromSearch(false);
-                  setCameFromRecommendations(false);
-                  setViewState('anime');
-                }}
-                viewState={viewState}
-                selectedSeason={selectedSeason}
-                selectedAnime={selectedAnime}
-              />
-            </>
+              {/* Sección del drive principal */}
+              <div className="w-full">
+                <DriveSection
+                  isOwnProfile={isOwnProfile}
+                  profileUsername={profileUser.username}
+                  driveData={driveData}
+                  onSeasonClick={(seasonData) => {
+                    setSelectedSeason(seasonData);
+                    setViewState('season');
+                  }}
+                  onAnimeClick={(animeData) => {
+                    setSelectedAnime(animeData);
+                    setCameFromSearch(false);
+                    setCameFromRecommendations(false);
+                    setViewState('anime');
+                  }}
+                  viewState={viewState}
+                  selectedSeason={selectedSeason}
+                  selectedAnime={selectedAnime}
+                />
+              </div>
+            </div>
           )}
 
+          {/* Vista de temporada */}
           {viewState === 'season' && selectedSeason && (
             <div className="relative">
+              {/* Botón de volver - Optimizado para móvil */}
               <button
                 onClick={() => {
                   setViewState('drive');
                   setSelectedSeason(null);
                 }}
-                className="absolute top-5 left-5 bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition duration-300 z-10"
+                className="
+                  fixed top-20 sm:top-24 left-3 sm:left-5 z-20
+                  bg-gradient-to-r from-blue-500 to-blue-600 text-white 
+                  p-2.5 sm:p-3 rounded-2xl sm:rounded-full 
+                  hover:from-blue-600 hover:to-blue-700 
+                  active:scale-95
+                  transition-all duration-200 ease-in-out
+                  shadow-lg hover:shadow-xl
+                  backdrop-blur-sm
+                "
+                aria-label="Volver al drive"
               >
-                <ArrowLeftIcon className="h-6 w-6" />
+                <ArrowLeftIcon className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
-              <DriveCalendar
-                data={[{ year: selectedSeason.year, seasons: [selectedSeason] }]}
-                onSeasonClick={(seasonData) => {
-                  setSelectedSeason(seasonData);
-                  setViewState('season');
-                }}
-                onAnimeClick={(animeData) => {
-                  setSelectedAnime(animeData);
-                  setCameFromSearch(false);
-                  setViewState('anime');
-                }}
-                viewState={viewState}
-                selectedSeason={selectedSeason}
+              
+              {/* Calendario con margen para el botón */}
+              <div className="mt-12 sm:mt-8">
+                <DriveCalendar
+                  data={[{ year: selectedSeason.year, seasons: [selectedSeason] }]}
+                  onSeasonClick={(seasonData) => {
+                    setSelectedSeason(seasonData);
+                    setViewState('season');
+                  }}
+                  onAnimeClick={(animeData) => {
+                    setSelectedAnime(animeData);
+                    setCameFromSearch(false);
+                    setViewState('anime');
+                  }}
+                  viewState={viewState}
+                  selectedSeason={selectedSeason}
+                  selectedAnime={selectedAnime}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Vista de anime individual */}
+          {viewState === 'anime' && selectedAnime && (
+            <div className="w-full">
+              <AnimeMain
                 selectedAnime={selectedAnime}
+                onBack={handleBackNavigation}
+                onEdit={() => isOwnProfile && setShowEditAnimeModal(true)}
+                onDelete={() => isOwnProfile && setShowDelAnimeModal(true)}
+                onReviewUpdate={(newReview) => {
+                  setSelectedAnime(prev => prev ? { ...prev, review: newReview } : null);
+                }}
+                username={profileUser.username}
+                backToSeason={!cameFromSearch && !cameFromRecommendations}
+                isOwnProfile={isOwnProfile}
+                profileUserId={profileUser.id}
+              />
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Modal de búsqueda de anime */}
+      {showSearchAnimeModal && (
+        <div className="fixed inset-0 z-50">
+          <AnimeSearchModal 
+            isOpen={showSearchAnimeModal}
+            onClose={() => setShowSearchAnimeModal(false)}
+            onAnimeSelect={handleSearchAnimeSelect}
+            isOwnProfile={isOwnProfile}
+            profileUserId={profileUser.id}
+            profileUsername={profileUser.username}
+          />
+        </div>
+      )}
+
+      {/* Modales - Solo para perfil propio */}
+      {isOwnProfile && (
+        <>
+          {showAddAnimeModal && (
+            <div className="fixed inset-0 z-50">
+              <AddAnimeModal
+                onClose={() => setShowAddAnimeModal(false)}
+                onSuccess={handleAddAnimeSuccess}
+                onError={handleAddAnimeError}
               />
             </div>
           )}
 
-          {viewState === 'anime' && selectedAnime && (
-            <AnimeMain
-              selectedAnime={selectedAnime}
-              onBack={handleBackNavigation}
-              onEdit={() => isOwnProfile && setShowEditAnimeModal(true)}
-              onDelete={() => isOwnProfile && setShowDelAnimeModal(true)}
-              onReviewUpdate={(newReview) => {
-                setSelectedAnime(prev => prev ? { ...prev, review: newReview } : null);
-              }}
-              username={profileUser.username}
-              backToSeason={!cameFromSearch && !cameFromRecommendations}
-              isOwnProfile={isOwnProfile}
-              profileUserId={profileUser.id}
-            />
+          {showEditAnimeModal && selectedAnime && (
+            <div className="fixed inset-0 z-50">
+              <EditAnimeModal
+                animeData={selectedAnime}
+                onClose={() => setShowEditAnimeModal(false)}
+                onSuccess={handleEditAnimeSuccess}
+                onError={handleEditAnimeError}
+              />
+            </div>
           )}
 
-          {/* Modals - Only shown if it's own profile */}
-          {showSearchAnimeModal && (
-  <AnimeSearchModal 
-    isOpen={showSearchAnimeModal}
-    onClose={() => setShowSearchAnimeModal(false)}
-    onAnimeSelect={handleSearchAnimeSelect}
-    isOwnProfile={isOwnProfile}
-    profileUserId={profileUser.id}
-    profileUsername={profileUser.username}
-  />
-)}
-
-  {/* Modals - Solo para perfil propio */}
-  {isOwnProfile && (
-    <>
-      {showAddAnimeModal && (
-        <AddAnimeModal
-          onClose={() => setShowAddAnimeModal(false)}
-          onSuccess={handleAddAnimeSuccess}
-          onError={handleAddAnimeError}
-        />
+          {showDelAnimeModal && selectedAnime && (
+            <div className="fixed inset-0 z-50">
+              <DELAnimeModal
+                anime={{
+                  id: selectedAnime.id,
+                  name: selectedAnime.title,
+                  image_url: selectedAnime.imageUrl || ''
+                }}
+                onClose={() => setShowDelAnimeModal(false)}
+                onDelete={handleDeleteAnime}
+              />
+            </div>
+          )}
+        </>
       )}
 
-      {showEditAnimeModal && selectedAnime && (
-        <EditAnimeModal
-          animeData={selectedAnime}
-          onClose={() => setShowEditAnimeModal(false)}
-          onSuccess={handleEditAnimeSuccess}
-          onError={handleEditAnimeError}
-        />
-      )}
-
-      {showDelAnimeModal && selectedAnime && (
-        <DELAnimeModal
-          anime={{
-            id: selectedAnime.id,
-            name: selectedAnime.title,
-            image_url: selectedAnime.imageUrl || ''
-          }}
-          onClose={() => setShowDelAnimeModal(false)}
-          onDelete={handleDeleteAnime}
-        />
-      )}
-    </>
-  )}
-        </div>
-      </main>
-
+      {/* Notificación toast - Posicionamiento móvil */}
       {notification && (
-        <NotificationToast
-          message={notification.message}
-          type={notification.type}
-          onClose={clearNotification}
-        />
+        <div className="fixed bottom-4 left-3 right-3 sm:left-4 sm:right-4 lg:left-auto lg:right-4 lg:w-96 z-50">
+          <NotificationToast
+            message={notification.message}
+            type={notification.type}
+            onClose={clearNotification}
+          />
+        </div>
       )}
     </div>
   );
