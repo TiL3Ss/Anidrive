@@ -1,7 +1,5 @@
 // app/api/user/animes/search-mal/route.ts
 import { NextResponse } from 'next/server'
-import chromium from '@sparticuz/chromium'
-import { chromium as playwright } from 'playwright-core'
 
 // Mapeo de nombres de temporada en español a inglés
 const SEASON_TRANSLATIONS: Record<string, string> = {
@@ -9,42 +7,123 @@ const SEASON_TRANSLATIONS: Record<string, string> = {
   'primavera': 'spring',
   'verano': 'summer',
   'otoño': 'fall',
-  'otoÃ±o': 'fall'
+  'otoño': 'fall'
 }
 
-// Cache para imágenes (opcional)
-const imageCache = new Map()
+// Cache simple para reducir llamadas a la API
+const apiCache = new Map<string, { data: any; timestamp: number }>()
 const CACHE_TIMEOUT = 600000 // 10 minutos
 
-async function extractAnimeImage(page: any, animeUrl: string): Promise<string | null> {
+// Rate limiting para Jikan API (respetar límites de 3 req/seg y 60 req/min)
+let lastRequestTime = 0
+const MIN_REQUEST_INTERVAL = 350 // 350ms entre requests para estar seguros
+
+async function rateLimitedFetch(url: string): Promise<Response> {
+  const now = Date.now()
+  const timeSinceLastRequest = now - lastRequestTime
+  
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => 
+      setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest)
+    )
+  }
+  
+  lastRequestTime = Date.now()
+  return fetch(url)
+}
+
+async function searchAnimeByName(name: string) {
+  const cacheKey = `search:${name}`
+  const cached = apiCache.get(cacheKey)
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_TIMEOUT) {
+    return cached.data
+  }
+
   try {
-    await page.goto(animeUrl, {
-      waitUntil: 'domcontentloaded',
-      timeout: 8000
-    })
+    const response = await rateLimitedFetch(
+      `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(name)}&limit=10&order_by=popularity`
+    )
 
-    const image_url = await page.evaluate(() => {
-      const imgElement =
-        (document.querySelector('img[itemprop="image"]') as HTMLImageElement) ||
-        (document.querySelector('.leftside img[src*="myanimelist.net/images/anime"]') as HTMLImageElement)
-
-      const imageSrc =
-        imgElement?.src ||
-        imgElement?.getAttribute('data-src') ||
-        null
-
-      return imageSrc
-    })
-
-    if (image_url && image_url.includes('myanimelist.net')) {
-      return image_url
+    if (!response.ok) {
+      throw new Error(`Jikan API error: ${response.status}`)
     }
 
-    return null
+    const data = await response.json()
+    apiCache.set(cacheKey, { data, timestamp: Date.now() })
+    
+    return data
   } catch (error) {
-    console.error('Error extrayendo imagen:', error)
+    console.error('Error en búsqueda por nombre:', error)
     return null
   }
+}
+
+async function searchAnimeBySeasonYear(year: string, season: string, name: string) {
+  const cacheKey = `season:${year}:${season}:${name}`
+  const cached = apiCache.get(cacheKey)
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_TIMEOUT) {
+    return cached.data
+  }
+
+  try {
+    // Primero obtenemos todos los animes de la temporada
+    const response = await rateLimitedFetch(
+      `https://api.jikan.moe/v4/seasons/${year}/${season}`
+    )
+
+    if (!response.ok) {
+      throw new Error(`Jikan API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    
+    // Filtramos localmente por el nombre
+    const filtered = {
+      data: data.data?.filter((anime: any) => 
+        anime.title?.toLowerCase().includes(name.toLowerCase()) ||
+        anime.title_english?.toLowerCase().includes(name.toLowerCase()) ||
+        anime.title_japanese?.toLowerCase().includes(name.toLowerCase())
+      ) || []
+    }
+    
+    apiCache.set(cacheKey, { data: filtered, timestamp: Date.now() })
+    return filtered
+  } catch (error) {
+    console.error('Error en búsqueda por temporada:', error)
+    return null
+  }
+}
+
+function findBestMatch(results: any[], searchName: string) {
+  if (!results || results.length === 0) return null
+
+  // Normalizar el nombre de búsqueda
+  const normalizedSearch = searchName.toLowerCase().trim()
+
+  // Buscar coincidencia exacta primero
+  let bestMatch = results.find((anime: any) => 
+    anime.title?.toLowerCase() === normalizedSearch ||
+    anime.title_english?.toLowerCase() === normalizedSearch ||
+    anime.title_japanese?.toLowerCase() === normalizedSearch
+  )
+
+  // Si no hay coincidencia exacta, buscar la que contenga el nombre
+  if (!bestMatch) {
+    bestMatch = results.find((anime: any) =>
+      anime.title?.toLowerCase().includes(normalizedSearch) ||
+      anime.title_english?.toLowerCase().includes(normalizedSearch) ||
+      anime.title_japanese?.toLowerCase().includes(normalizedSearch)
+    )
+  }
+
+  // Si aún no hay match, tomar el más popular
+  if (!bestMatch && results.length > 0) {
+    bestMatch = results[0]
+  }
+
+  return bestMatch
 }
 
 export async function GET(request: Request) {
@@ -55,134 +134,70 @@ export async function GET(request: Request) {
   let season_name = searchParams.get('season_name')?.toLowerCase() || ''
   const year = searchParams.get('year') || ''
 
+  // Traducir temporada si es necesario
   if (season_name && SEASON_TRANSLATIONS[season_name]) {
     season_name = SEASON_TRANSLATIONS[season_name]
   }
 
   if (!name) {
-    return NextResponse.json({ error: 'El parámetro "name" es requerido' }, { status: 400 })
+    return NextResponse.json({ 
+      error: 'El parámetro "name" es requerido' 
+    }, { status: 400 })
   }
 
-  let browser
   try {
-    // Configuración para desarrollo local vs Vercel
-    const isLocal = process.env.NODE_ENV === 'development'
-    
-    browser = await playwright.launch({
-      args: isLocal ? [] : chromium.args,
-      executablePath: isLocal 
-        ? undefined 
-        : await chromium.executablePath(),
-      headless: true,
-    })
+    let searchResult = null
+    let searchMethod = ''
 
-    const context = await browser.newContext()
-    const page = await context.newPage()
-
-    // Estrategia 1: Búsqueda directa
-    await page.goto(`https://myanimelist.net/anime.php?q=${encodeURIComponent(name)}&cat=anime`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    })
-
-    const animeFromSearch = await page.evaluate((searchName) => {
-      const results = Array.from(document.querySelectorAll('.list-table .title'))
-      for (const item of results) {
-        const title = item.textContent?.toLowerCase()
-        const link = item.getAttribute('href')
-        if (title?.includes(searchName) && link) {
-          const idMatch = link.match(/anime\/(\d+)/)
-          if (idMatch) {
-            const fullUrl = link.startsWith('http') ? link : `https://myanimelist.net${link}`
-            return {
-              id: idMatch[1],
-              title: item.textContent?.trim(),
-              url: fullUrl,
-            }
-          }
-        }
+    // Estrategia 1: Si tenemos temporada y año, buscar por temporada primero
+    if (season_name && year && ['winter', 'spring', 'summer', 'fall'].includes(season_name)) {
+      const seasonData = await searchAnimeBySeasonYear(year, season_name, name)
+      
+      if (seasonData?.data && seasonData.data.length > 0) {
+        searchResult = findBestMatch(seasonData.data, name)
+        searchMethod = 'season_search'
       }
-      return null
-    }, name)
+    }
 
-    if (animeFromSearch) {
-      let image_url = imageCache.get(animeFromSearch.id)
-
-      if (!image_url) {
-        image_url = await extractAnimeImage(page, animeFromSearch.url)
-        if (image_url) {
-          imageCache.set(animeFromSearch.id, image_url)
-          setTimeout(() => imageCache.delete(animeFromSearch.id), CACHE_TIMEOUT)
-        }
+    // Estrategia 2: Búsqueda directa por nombre si no encontramos por temporada
+    if (!searchResult) {
+      const searchData = await searchAnimeByName(name)
+      
+      if (searchData?.data && searchData.data.length > 0) {
+        searchResult = findBestMatch(searchData.data, name)
+        searchMethod = 'direct_search'
       }
+    }
 
+    // Si encontramos resultado
+    if (searchResult) {
       return NextResponse.json({
         success: true,
-        mal_id: animeFromSearch.id,
-        title: animeFromSearch.title,
-        url: animeFromSearch.url,
-        image_url: image_url || 'https://cdn.myanimelist.net/images/anime/1141/142503.jpg',
-        search_method: 'direct_search',
+        mal_id: searchResult.mal_id?.toString(),
+        title: searchResult.title || searchResult.title_english,
+        title_english: searchResult.title_english,
+        title_japanese: searchResult.title_japanese,
+        url: searchResult.url,
+        image_url: searchResult.images?.jpg?.large_image_url || 
+                   searchResult.images?.jpg?.image_url || 
+                   'https://cdn.myanimelist.net/images/anime/1141/142503.jpg',
+        synopsis: searchResult.synopsis,
+        episodes: searchResult.episodes,
+        score: searchResult.score,
+        year: searchResult.year,
+        season: searchResult.season,
+        status: searchResult.status,
+        search_method: searchMethod,
       })
     }
 
-    // Estrategia 2: Búsqueda por temporada
-    if (season_name && year) {
-      await page.goto(`https://myanimelist.net/anime/season/${year}/${season_name}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 15000,
-      })
-
-      const animeFromSeason = await page.evaluate((searchName) => {
-        const items = Array.from(document.querySelectorAll('.seasonal-anime'))
-        for (const item of items) {
-          const titleEl = item.querySelector('.title a') || item.querySelector('a.link-title')
-          const title = titleEl?.textContent?.toLowerCase()
-          const link = titleEl?.getAttribute('href')
-          if (title?.includes(searchName) && link) {
-            const idMatch = link.match(/anime\/(\d+)/)
-            if (idMatch) {
-              const fullUrl = link.startsWith('http') ? link : `https://myanimelist.net${link}`
-              return {
-                id: idMatch[1],
-                title: titleEl.textContent?.trim(),
-                url: fullUrl,
-              }
-            }
-          }
-        }
-        return null
-      }, name)
-
-      if (animeFromSeason) {
-        let image_url = imageCache.get(animeFromSeason.id)
-
-        if (!image_url) {
-          image_url = await extractAnimeImage(page, animeFromSeason.url)
-          if (image_url) {
-            imageCache.set(animeFromSeason.id, image_url)
-            setTimeout(() => imageCache.delete(animeFromSeason.id), CACHE_TIMEOUT)
-          }
-        }
-
-        return NextResponse.json({
-          success: true,
-          mal_id: animeFromSeason.id,
-          title: animeFromSeason.title,
-          url: animeFromSeason.url,
-          image_url: image_url || 'https://cdn.myanimelist.net/images/anime/1141/142503.jpg',
-          search_method: 'season_search',
-        })
-      }
-    }
-
-    // Si no se encontró
+    // Si no se encontró nada
     return NextResponse.json(
       {
         error: 'Anime no encontrado',
         suggestions: [
           'Verifica la ortografía del nombre',
-          'Intenta con el nombre en inglés/japonés',
+          'Intenta con el nombre en inglés o japonés',
           'Prueba sin acentos o caracteres especiales',
           season_name && year ? '' : 'Proporciona temporada y año para búsqueda más precisa',
         ].filter(Boolean),
@@ -201,10 +216,9 @@ export async function GET(request: Request) {
       {
         error: 'Error en la búsqueda',
         details: error.message || 'Error desconocido',
+        hint: 'Verifica que la API de Jikan esté disponible'
       },
       { status: 500 }
     )
-  } finally {
-    if (browser) await browser.close().catch(console.error)
   }
 }

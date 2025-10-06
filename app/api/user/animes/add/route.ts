@@ -13,18 +13,25 @@ function bigIntToNumber(value: any): number {
 }
 
 const STATES_VIEW_OPTIONS = [
-  { id: 1, name: 'Viendo' }, { id: 2, name: 'Terminado' },
-  { id: 3, name: 'Pendiente' }, { id: 4, name: 'Abandonado' }
+  { id: 1, name: 'Viendo' }, 
+  { id: 2, name: 'Terminado' },
+  { id: 3, name: 'Pendiente' }, 
+  { id: 4, name: 'Abandonado' }
 ];
 
 const RATINGS_OPTIONS = [
-  { id: 1, value: '1★' }, { id: 2, value: '2★' },
-  { id: 3, value: '3★' }, { id: 4, value: '4★' }, { id: 5, value: '5★' }
+  { id: 1, value: '1★' }, 
+  { id: 2, value: '2★' },
+  { id: 3, value: '3★' }, 
+  { id: 4, value: '4★' }, 
+  { id: 5, value: '5★' }
 ];
 
 const SEASONS_OPTIONS = [
-  { id: 1, name: 'Invierno' }, { id: 2, name: 'Primavera' },
-  { id: 3, name: 'Verano' }, { id: 4, name: 'Otoño' }
+  { id: 1, name: 'Invierno' }, 
+  { id: 2, name: 'Primavera' },
+  { id: 3, name: 'Verano' }, 
+  { id: 4, name: 'Otoño' }
 ];
 
 // Función helper para obtener la URL base correcta
@@ -92,94 +99,168 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // 1. Buscar el anime en MyAnimeList usando la URL correcta
+    // 1. Buscar el anime en MyAnimeList usando Jikan
     const baseUrl = getBaseUrl(request);
     const searchUrl = `${baseUrl}/api/user/animes/search-mal?name=${encodeURIComponent(animeName)}&season=${seasonCour}&season_name=${seasonName}&year=${year}`;
     
     console.log('Base URL:', baseUrl);
-    console.log('Buscando anime en MAL:', searchUrl);
+    console.log('Buscando anime en MAL vía Jikan:', searchUrl);
     
-    const searchResponse = await fetch(searchUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // Aumentar timeout para Vercel
-      signal: AbortSignal.timeout(25000), // 25 segundos
-    });
-
-    let malData = null;
+    // Valores por defecto
     let malId = null;
-    let malTitle = animeName; // Fallback al nombre original
-    let imageUrl = 'https://cdn.myanimelist.net/images/anime/1141/142503.jpg'; // Imagen por defecto
+    let malTitle = animeName;
+    let malTitleEnglish = null;
+    let malTitleJapanese = null;
+    let imageUrl = 'https://cdn.myanimelist.net/images/anime/1141/142503.jpg';
+    let synopsis = null;
+    let malScore = null;
+    let malUrl = null;
+    let malStatus = null;
+    let detectedEpisodes = totalChapters;
+    let searchMethod = null;
 
-    if (searchResponse.ok) {
-      const searchData = await searchResponse.json();
-      console.log('Respuesta de MAL:', searchData);
+    try {
+      const searchResponse = await fetch(searchUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(15000), // 15 segundos (Jikan es más rápido)
+      });
 
-      // Verificar si la búsqueda fue exitosa
-      if (searchData.success && searchData.mal_id) {
-        malId = searchData.mal_id;
-        malTitle = searchData.title || animeName;
-        imageUrl = searchData.image_url || imageUrl;
-        malData = {
-          mal_id: malId,
-          title: malTitle,
-          url: searchData.url,
-          image_url: imageUrl,
-          search_method: searchData.search_method
-        };
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        console.log('Respuesta de Jikan:', searchData);
+
+        // Verificar si la búsqueda fue exitosa
+        if (searchData.success && searchData.mal_id) {
+          malId = searchData.mal_id;
+          malTitle = searchData.title || animeName;
+          malTitleEnglish = searchData.title_english || null;
+          malTitleJapanese = searchData.title_japanese || null;
+          imageUrl = searchData.image_url || imageUrl;
+          synopsis = searchData.synopsis || null;
+          malScore = searchData.score || null;
+          malUrl = searchData.url || null;
+          malStatus = searchData.status || null;
+          searchMethod = searchData.search_method || null;
+          
+          // Si encontramos episodios y no teníamos totalChapters, usar el de MAL
+          if (searchData.episodes && !totalChapters) {
+            detectedEpisodes = searchData.episodes;
+          }
+
+          console.log('✅ Anime encontrado en MAL:', {
+            mal_id: malId,
+            title: malTitle,
+            episodes: detectedEpisodes,
+            method: searchMethod
+          });
+        } else {
+          console.warn('⚠️ No se encontró el anime en MAL, usando valores por defecto');
+        }
       } else {
-        console.warn('No se encontró el anime en MAL, usando valores por defecto');
+        const errorText = await searchResponse.text();
+        console.warn('⚠️ Error en la búsqueda de MAL:', searchResponse.status, errorText);
       }
-    } else {
-      const errorText = await searchResponse.text();
-      console.warn('Error en la búsqueda de MAL:', errorText);
+    } catch (fetchError: any) {
+      // Si falla la búsqueda de MAL, continuamos con los valores por defecto
+      console.warn('⚠️ Error al buscar en MAL (continuando con valores por defecto):', fetchError.message);
     }
 
     // 2. Verificar si el anime ya existe en la base de datos
     const animeResult = await client.execute({
-      sql: 'SELECT id, image_url, name_mal FROM animes WHERE LOWER(name) = ? AND LOWER(season) = ? AND year = ?',
+      sql: 'SELECT id, image_url, name_mal, mal_id FROM animes WHERE LOWER(name) = ? AND LOWER(season) = ? AND year = ?',
       args: [animeName.toLowerCase(), seasonCour.toLowerCase(), year]
     });
 
     let animeId;
+    let isNewAnime = false;
 
     if (animeResult.rows.length === 0) {
-      // Insertar nuevo anime con todos los datos (SIN mal_id)
+      // Insertar nuevo anime con todos los datos de Jikan
       const insertResult = await client.execute({
-        sql: `INSERT INTO animes (name, name_mal, season, total_chapters, year, season_name, image_url)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO animes (
+          name, 
+          name_mal, 
+          name_mal_english, 
+          name_mal_japanese, 
+          mal_id, 
+          season, 
+          total_chapters, 
+          year, 
+          season_name, 
+          image_url,
+          synopsis,
+          mal_score,
+          mal_url,
+          mal_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           animeName,
           malTitle,
+          malTitleEnglish,
+          malTitleJapanese,
+          malId,
           seasonCour,
-          totalChapters || 0,
+          detectedEpisodes || 0,
           year,
           seasonName,
-          imageUrl
+          imageUrl,
+          synopsis,
+          malScore,
+          malUrl,
+          malStatus
         ]
       });
-      animeId = insertResult.lastInsertRowid;
-      animeId = bigIntToNumber(animeId); // Convertir BigInt a Number
-      console.log('Nuevo anime insertado con ID:', animeId);
+      animeId = bigIntToNumber(insertResult.lastInsertRowid);
+      isNewAnime = true;
+      console.log('✅ Nuevo anime insertado con ID:', animeId);
     } else {
       // Anime existente
       const anime = animeResult.rows[0];
-      animeId = bigIntToNumber(anime.id); // Convertir BigInt a Number
+      animeId = bigIntToNumber(anime.id);
       
-      // Actualizar datos de MAL si los encontramos y no existían antes
-      const shouldUpdateMal = malTitle && imageUrl && (!anime.name_mal || !anime.image_url);
+      // Actualizar datos de MAL si los encontramos y no existían antes o si son más completos
+      const shouldUpdateMal = malId && (
+        !anime.mal_id || 
+        !anime.name_mal || 
+        !anime.image_url ||
+        anime.image_url === 'https://cdn.myanimelist.net/images/anime/1141/142503.jpg'
+      );
       
       if (shouldUpdateMal) {
         await client.execute({
           sql: `UPDATE animes 
-                SET name_mal = COALESCE(name_mal, ?), 
-                    image_url = COALESCE(image_url, ?)
+                SET mal_id = COALESCE(mal_id, ?),
+                    name_mal = COALESCE(name_mal, ?),
+                    name_mal_english = COALESCE(name_mal_english, ?),
+                    name_mal_japanese = COALESCE(name_mal_japanese, ?),
+                    image_url = CASE 
+                      WHEN image_url = 'https://cdn.myanimelist.net/images/anime/1141/142503.jpg' 
+                      THEN ? 
+                      ELSE COALESCE(image_url, ?) 
+                    END,
+                    synopsis = COALESCE(synopsis, ?),
+                    mal_score = COALESCE(mal_score, ?),
+                    mal_url = COALESCE(mal_url, ?),
+                    mal_status = COALESCE(mal_status, ?)
                 WHERE id = ?`,
-          args: [malTitle, imageUrl, animeId]
+          args: [
+            malId,
+            malTitle,
+            malTitleEnglish,
+            malTitleJapanese,
+            imageUrl,
+            imageUrl,
+            synopsis,
+            malScore,
+            malUrl,
+            malStatus,
+            animeId
+          ]
         });
-        console.log('Anime actualizado con datos de MAL');
+        console.log('✅ Anime actualizado con datos de MAL/Jikan');
       }
     }
 
@@ -197,8 +278,14 @@ export async function POST(request: Request) {
 
     // 4. Insertar relación usuario-anime
     await client.execute({
-      sql: `INSERT INTO user_animes (user_id, anime_id, current_chapter, state_name, rating_value, review)
-            VALUES (?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO user_animes (
+        user_id, 
+        anime_id, 
+        current_chapter, 
+        state_name, 
+        rating_value, 
+        review
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
       args: [
         userId,
         animeId,
@@ -209,19 +296,43 @@ export async function POST(request: Request) {
       ]
     });
 
-    console.log('Relación usuario-anime creada exitosamente');
+    console.log('✅ Relación usuario-anime creada exitosamente');
 
-    return NextResponse.json({
+    // Preparar respuesta con información detallada
+    const responseData: any = {
       message: 'Anime añadido con éxito',
       animeId: animeId,
-      malData: malData || {
+      isNewAnime: isNewAnime,
+    };
+
+    // Incluir datos de MAL si los encontramos
+    if (malId) {
+      responseData.malData = {
+        mal_id: malId,
+        title: malTitle,
+        title_english: malTitleEnglish,
+        title_japanese: malTitleJapanese,
+        url: malUrl,
+        image_url: imageUrl,
+        synopsis: synopsis,
+        score: malScore,
+        status: malStatus,
+        episodes: detectedEpisodes,
+        search_method: searchMethod,
+        source: 'jikan_api'
+      };
+    } else {
+      responseData.malData = {
         message: 'No se encontraron datos en MyAnimeList',
-        using_defaults: true
-      }
-    });
+        using_defaults: true,
+        default_image: imageUrl
+      };
+    }
+
+    return NextResponse.json(responseData);
 
   } catch (error: any) {
-    console.error('Error adding anime for user:', error);
+    console.error('❌ Error adding anime for user:', error);
     
     // Manejo específico de errores de base de datos
     if (error.message && error.message.includes('UNIQUE constraint failed')) {
@@ -230,11 +341,11 @@ export async function POST(request: Request) {
       }, { status: 409 });
     }
 
-    // Error de conexión
-    if (error.code === 'ECONNREFUSED') {
+    // Error de timeout
+    if (error.name === 'AbortError' || error.code === 'ETIMEDOUT') {
       return NextResponse.json({
-        message: 'Error de configuración: No se puede conectar a la API de búsqueda.',
-        hint: 'Verifica la configuración de NEXT_PUBLIC_API_URL en las variables de entorno.'
+        message: 'Timeout al buscar en MyAnimeList. El anime se guardó con datos básicos.',
+        hint: 'Puedes editar el anime más tarde para actualizar su información.'
       }, { status: 500 });
     }
 
