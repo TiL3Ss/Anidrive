@@ -6,7 +6,8 @@
     "dev": "next dev -p 5454",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "npx playwright install --with-deps"
   },
   "dependencies": {
     "@firecms/neat": "^0.4.0",
