@@ -7,7 +7,7 @@ const SEASON_TRANSLATIONS: Record<string, string> = {
   'primavera': 'spring',
   'verano': 'summer',
   'otoño': 'fall',
-  'otoño': 'fall'
+  'otoÃ±o': 'fall'
 }
 
 // Cache simple para reducir llamadas a la API
@@ -16,7 +16,7 @@ const CACHE_TIMEOUT = 600000 // 10 minutos
 
 // Rate limiting para Jikan API (respetar límites de 3 req/seg y 60 req/min)
 let lastRequestTime = 0
-const MIN_REQUEST_INTERVAL = 350 // 350ms entre requests para estar seguros
+const MIN_REQUEST_INTERVAL = 350 // 350ms entre requests
 
 async function rateLimitedFetch(url: string): Promise<Response> {
   const now = Date.now()
@@ -68,7 +68,6 @@ async function searchAnimeBySeasonYear(year: string, season: string, name: strin
   }
 
   try {
-    // Primero obtenemos todos los animes de la temporada
     const response = await rateLimitedFetch(
       `https://api.jikan.moe/v4/seasons/${year}/${season}`
     )
@@ -99,7 +98,6 @@ async function searchAnimeBySeasonYear(year: string, season: string, name: strin
 function findBestMatch(results: any[], searchName: string) {
   if (!results || results.length === 0) return null
 
-  // Normalizar el nombre de búsqueda
   const normalizedSearch = searchName.toLowerCase().trim()
 
   // Buscar coincidencia exacta primero
@@ -169,12 +167,12 @@ export async function GET(request: Request) {
       }
     }
 
-    // Si encontramos resultado
+    // Si encontramos resultado, retornar SOLO los campos necesarios
     if (searchResult) {
       return NextResponse.json({
         success: true,
         mal_id: searchResult.mal_id?.toString(),
-        title: searchResult.title || searchResult.title_english,
+        title: searchResult.title,
         title_english: searchResult.title_english,
         title_japanese: searchResult.title_japanese,
         url: searchResult.url,
@@ -182,11 +180,6 @@ export async function GET(request: Request) {
                    searchResult.images?.jpg?.image_url || 
                    'https://cdn.myanimelist.net/images/anime/1141/142503.jpg',
         synopsis: searchResult.synopsis,
-        episodes: searchResult.episodes,
-        score: searchResult.score,
-        year: searchResult.year,
-        season: searchResult.season,
-        status: searchResult.status,
         search_method: searchMethod,
       })
     }

@@ -332,7 +332,7 @@ export async function POST(request: Request) {
     return NextResponse.json(responseData);
 
   } catch (error: any) {
-    console.error('❌ Error adding anime for user:', error);
+    console.error('Error adding anime for user:', error);
     
     // Manejo específico de errores de base de datos
     if (error.message && error.message.includes('UNIQUE constraint failed')) {
