@@ -138,10 +138,10 @@ export async function POST(request: Request) {
     let animeId;
 
     if (animeResult.rows.length === 0) {
-      // Insertar nuevo anime con todos los datos
+      // Insertar nuevo anime con todos los datos (SIN mal_id)
       const insertResult = await client.execute({
-        sql: `INSERT INTO animes (name, name_mal, season, total_chapters, year, season_name, image_url, mal_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO animes (name, name_mal, season, total_chapters, year, season_name, image_url)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`,
         args: [
           animeName,
           malTitle,
@@ -149,8 +149,7 @@ export async function POST(request: Request) {
           totalChapters || 0,
           year,
           seasonName,
-          imageUrl,
-          malId
+          imageUrl
         ]
       });
       animeId = insertResult.lastInsertRowid;
@@ -161,16 +160,15 @@ export async function POST(request: Request) {
       animeId = anime.id;
       
       // Actualizar datos de MAL si los encontramos y no existían antes
-      const shouldUpdateMal = malId && (!anime.name_mal || !anime.image_url);
+      const shouldUpdateMal = malTitle && imageUrl && (!anime.name_mal || !anime.image_url);
       
       if (shouldUpdateMal) {
         await client.execute({
           sql: `UPDATE animes 
                 SET name_mal = COALESCE(name_mal, ?), 
-                    image_url = COALESCE(image_url, ?),
-                    mal_id = COALESCE(mal_id, ?)
+                    image_url = COALESCE(image_url, ?)
                 WHERE id = ?`,
-          args: [malTitle, imageUrl, malId, animeId]
+          args: [malTitle, imageUrl, animeId]
         });
         console.log('Anime actualizado con datos de MAL');
       }
