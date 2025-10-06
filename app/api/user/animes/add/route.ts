@@ -4,6 +4,14 @@ import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 
+// Helper para convertir BigInt a Number de forma segura
+function bigIntToNumber(value: any): number {
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+  return value;
+}
+
 const STATES_VIEW_OPTIONS = [
   { id: 1, name: 'Viendo' }, { id: 2, name: 'Terminado' },
   { id: 3, name: 'Pendiente' }, { id: 4, name: 'Abandonado' }
@@ -153,11 +161,12 @@ export async function POST(request: Request) {
         ]
       });
       animeId = insertResult.lastInsertRowid;
+      animeId = bigIntToNumber(animeId); // Convertir BigInt a Number
       console.log('Nuevo anime insertado con ID:', animeId);
     } else {
       // Anime existente
       const anime = animeResult.rows[0];
-      animeId = anime.id;
+      animeId = bigIntToNumber(anime.id); // Convertir BigInt a Number
       
       // Actualizar datos de MAL si los encontramos y no existían antes
       const shouldUpdateMal = malTitle && imageUrl && (!anime.name_mal || !anime.image_url);
