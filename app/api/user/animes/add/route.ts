@@ -19,6 +19,30 @@ const SEASONS_OPTIONS = [
   { id: 3, name: 'Verano' }, { id: 4, name: 'Otoño' }
 ];
 
+// Función helper para obtener la URL base correcta
+function getBaseUrl(req: Request): string {
+  // En producción, usar el host de la request
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  
+  // Si hay variable de entorno configurada
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  
+  // Obtener del header de la request
+  const host = req.headers.get('host');
+  const protocol = req.headers.get('x-forwarded-proto') || 'http';
+  
+  if (host) {
+    return `${protocol}://${host}`;
+  }
+  
+  // Fallback para desarrollo local
+  return 'http://localhost:5454';
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
 
@@ -60,10 +84,11 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // 1. Buscar el anime en MyAnimeList
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5454';
+    // 1. Buscar el anime en MyAnimeList usando la URL correcta
+    const baseUrl = getBaseUrl(request);
     const searchUrl = `${baseUrl}/api/user/animes/search-mal?name=${encodeURIComponent(animeName)}&season=${seasonCour}&season_name=${seasonName}&year=${year}`;
     
+    console.log('Base URL:', baseUrl);
     console.log('Buscando anime en MAL:', searchUrl);
     
     const searchResponse = await fetch(searchUrl, {
@@ -71,6 +96,8 @@ export async function POST(request: Request) {
       headers: {
         'Content-Type': 'application/json',
       },
+      // Aumentar timeout para Vercel
+      signal: AbortSignal.timeout(25000), // 25 segundos
     });
 
     let malData = null;
@@ -98,7 +125,8 @@ export async function POST(request: Request) {
         console.warn('No se encontró el anime en MAL, usando valores por defecto');
       }
     } else {
-      console.warn('Error en la búsqueda de MAL:', await searchResponse.text());
+      const errorText = await searchResponse.text();
+      console.warn('Error en la búsqueda de MAL:', errorText);
     }
 
     // 2. Verificar si el anime ya existe en la base de datos
@@ -193,6 +221,14 @@ export async function POST(request: Request) {
       return NextResponse.json({
         message: 'Error de base de datos: Posible duplicado de anime o asociación de usuario.'
       }, { status: 409 });
+    }
+
+    // Error de conexión
+    if (error.code === 'ECONNREFUSED') {
+      return NextResponse.json({
+        message: 'Error de configuración: No se puede conectar a la API de búsqueda.',
+        hint: 'Verifica la configuración de NEXT_PUBLIC_API_URL en las variables de entorno.'
+      }, { status: 500 });
     }
 
     // Error genérico
