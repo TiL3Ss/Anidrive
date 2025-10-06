@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "app/api/user/animes/search-mal/route.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  }
+}

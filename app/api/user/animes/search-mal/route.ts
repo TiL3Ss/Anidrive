@@ -1,6 +1,7 @@
 // app/api/user/animes/search-mal/route.ts
-import chromium from 'playwright-aws-lambda'
 import { NextResponse } from 'next/server'
+import chromium from '@sparticuz/chromium'
+import { chromium as playwright } from 'playwright-core'
 
 // Mapeo de nombres de temporada en español a inglés
 const SEASON_TRANSLATIONS: Record<string, string> = {
@@ -64,10 +65,15 @@ export async function GET(request: Request) {
 
   let browser
   try {
-    browser = await chromium.launchChromium({
-      args: chromium.args,
+    // Configuración para desarrollo local vs Vercel
+    const isLocal = process.env.NODE_ENV === 'development'
+    
+    browser = await playwright.launch({
+      args: isLocal ? [] : chromium.args,
+      executablePath: isLocal 
+        ? undefined 
+        : await chromium.executablePath(),
       headless: true,
-      executablePath: await chromium.executablePath,
     })
 
     const context = await browser.newContext()
