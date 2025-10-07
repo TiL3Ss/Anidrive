@@ -10,9 +10,20 @@ const seasonColors = {
   'Otoño': 'bg-yellow-600',
 };
 
+const seasonOrder = ['Invierno','Primavera', 'Verano', 'Otoño' ]
+
 const getSeasonColorForBubble = (seasonName) => {
     return seasonColors[seasonName] || 'bg-gray-400';
 };
+
+const sortSeasonsByOrder = (seasons) => {
+  return [...seasons].sort((a, b) => {
+    const indexA = seasonOrder.indexOf(a.name);
+    const indexB = seasonOrder.indexOf(b.name);
+    return indexA - indexB;
+  });
+};
+
 
 const AnimeBubble = ({ anime, onClick, isFocused }) => {
   const shortTitle = anime.title.length > 20 ? `${anime.title.substring(0, 20)}...` : anime.title;
@@ -108,7 +119,7 @@ export default function DriveCalendar({ data, onSeasonClick, onAnimeClick, viewS
           </div>
         ))}
         {season.animes.length > 3 && (
-          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gray-300 flex items-center justify-center text-lg sm:text-xl font-bold text-gray-700">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gray-200 flex items-center justify-center text-lg sm:text-xl font-bold text-gray-700">
             ...
           </div>
         )}
@@ -117,7 +128,7 @@ export default function DriveCalendar({ data, onSeasonClick, onAnimeClick, viewS
   );
 
   const getAdjacentSeasons = (yearData, currentSeasonName) => {
-    const seasonsInYear = yearData.seasons;
+    const seasonsInYear = sortSeasonsByOrder(yearData.seasons);
     const currentIndex = seasonsInYear.findIndex(s => s.name === currentSeasonName);
     let prevSeason = null;
     let nextSeason = null;
@@ -131,7 +142,6 @@ export default function DriveCalendar({ data, onSeasonClick, onAnimeClick, viewS
     return { prevSeason, nextSeason };
   };
 
-  // Vista de anime individual - centrada y responsive
   if (viewState === 'anime' && selectedAnime) {
     return (
       <div className="flex justify-center items-center h-full min-h-screen pt-16 px-4">
@@ -140,17 +150,14 @@ export default function DriveCalendar({ data, onSeasonClick, onAnimeClick, viewS
     );
   }
 
-  // Vista de temporada con navegación lateral adaptativa
   if (viewState === 'season' && selectedSeason) {
     const yearData = data.find(y => y.year === selectedSeason.year);
     if (!yearData) return null;
 
     const { prevSeason, nextSeason } = getAdjacentSeasons(yearData, selectedSeason.name);
 
-    // En móvil, mostramos solo la temporada principal y agregamos botones de navegación
     return (
       <div className="mt-4 sm:mt-8">
-        {/* Navegación móvil - botones arriba */}
         <div className="flex justify-between mb-4 sm:hidden">
           {prevSeason ? (
             <button
@@ -171,7 +178,6 @@ export default function DriveCalendar({ data, onSeasonClick, onAnimeClick, viewS
           ) : <div></div>}
         </div>
 
-        {/* Layout desktop con columnas laterales */}
         <div className="hidden sm:flex h-full min-h-screen">
           {prevSeason && (
             <div className="w-[15%] p-2 flex-shrink-0" onClick={() => onSeasonClick({ ...prevSeason, year: selectedSeason.year })}>
@@ -197,7 +203,6 @@ export default function DriveCalendar({ data, onSeasonClick, onAnimeClick, viewS
           )}
         </div>
 
-        {/* Layout móvil - solo temporada principal */}
         <div className="sm:hidden px-2">
           <div className={`${selectedSeason.color} p-4 rounded-[2rem] shadow-xl flex flex-col items-center justify-center min-h-[300px] w-full`}>
             <h2 className="text-xl font-bold text-gray-900 mb-4 text-center">{selectedSeason.name} {selectedSeason.year}</h2>
@@ -212,17 +217,20 @@ export default function DriveCalendar({ data, onSeasonClick, onAnimeClick, viewS
     );
   }
 
-  // Vista principal del Drive - responsive grid
   return (
     <div className="mt-4 sm:mt-8 px-2 sm:px-0">
-      {data.map((yearData) => (
-        <div key={yearData.year} className="mb-8 sm:mb-12">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-6 text-center sm:text-left">{yearData.year}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {yearData.seasons.map((season) => renderSeasonBlock(season, yearData.year))}
+      {data.map((yearData) => {
+        const sortedSeasons = sortSeasonsByOrder(yearData.seasons);
+        
+        return (
+          <div key={yearData.year} className="mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-6 text-center sm:text-left">{yearData.year}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              {sortedSeasons.map((season) => renderSeasonBlock(season, yearData.year))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
