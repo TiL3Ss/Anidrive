@@ -111,51 +111,71 @@ export async function POST(request: Request) {
     let searchMethod = null;
 
     try {
-      const searchResponse = await fetch(searchUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(15000),
-      });
+  const searchResponse = await fetch(searchUrl, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    signal: AbortSignal.timeout(15000),
+  });
 
-      if (searchResponse.ok) {
-        const searchData = await searchResponse.json();
-        console.log('✅ Respuesta de Jikan:', searchData);
+  console.log('📡 Status de respuesta:', searchResponse.status);
+  console.log('📡 Headers:', Object.fromEntries(searchResponse.headers.entries()));
 
-        if (searchData.success && searchData.mal_id) {
-          malId = searchData.mal_id;
-          malTitle = searchData.title || animeName;
-          malTitleEnglish = searchData.title_english || null;
-          malTitleJapanese = searchData.title_japanese || null;
-          
-          // ✅ FIX: Validar que image_url tenga un valor válido antes de usarlo
-          if (searchData.image_url && searchData.image_url.trim() !== '') {
-            imageUrl = searchData.image_url;
-            console.log('✅ Image URL obtenida de MAL:', imageUrl);
-          } else {
-            console.warn('⚠️ MAL no devolvió image_url válida, usando default');
-          }
-          
-          synopsis = searchData.synopsis || null;
-          searchMethod = searchData.search_method || null;
+  if (searchResponse.ok) {
+    const searchData = await searchResponse.json();
+    
+    // 🔍 LOG CRÍTICO: Ver qué recibimos
+    console.log('📦 RAW searchData completo:', JSON.stringify(searchData, null, 2));
+    console.log('🔍 searchData.success:', searchData.success, '(type:', typeof searchData.success, ')');
+    console.log('🔍 searchData.mal_id:', searchData.mal_id, '(type:', typeof searchData.mal_id, ')');
+    console.log('🔍 searchData.image_url:', searchData.image_url);
+    
+    // Verificar la condición
+    const conditionResult = searchData.success && searchData.mal_id;
+    console.log('🎯 Condición (success && mal_id):', conditionResult);
 
-          console.log('✅ Anime encontrado en MAL:', {
-            mal_id: malId,
-            title: malTitle,
-            image_url: imageUrl,
-            method: searchMethod
-          });
-        } else {
-          console.warn('⚠️ No se encontró el anime en MAL, usando valores por defecto');
-        }
+    if (searchData.success && searchData.mal_id) {
+      console.log('✅ ENTRANDO al bloque de asignación de valores MAL');
+      
+      malId = searchData.mal_id;
+      malTitle = searchData.title || animeName;
+      malTitleEnglish = searchData.title_english || null;
+      malTitleJapanese = searchData.title_japanese || null;
+      
+      if (searchData.image_url && searchData.image_url.trim() !== '') {
+        imageUrl = searchData.image_url;
+        console.log('✅ Image URL asignada:', imageUrl);
       } else {
-        const errorText = await searchResponse.text();
-        console.warn('⚠️ Error en la búsqueda de MAL:', searchResponse.status, errorText);
+        console.warn('⚠️ MAL no devolvió image_url válida, usando default');
       }
-    } catch (fetchError: any) {
-      console.warn('⚠️ Error al buscar en MAL (continuando con valores por defecto):', fetchError.message);
+      
+      synopsis = searchData.synopsis || null;
+      searchMethod = searchData.search_method || null;
+
+      // 🔍 LOG: Verificar valores asignados
+      console.log('📝 Valores asignados después del bloque:', {
+        malId,
+        malTitle,
+        malTitleEnglish,
+        malTitleJapanese,
+        imageUrl,
+        synopsis: synopsis?.substring(0, 50) + '...',
+        searchMethod
+      });
+    } else {
+      console.error('❌ NO SE CUMPLIÓ LA CONDICIÓN');
+      console.error('   - success:', searchData.success);
+      console.error('   - mal_id:', searchData.mal_id);
     }
+  } else {
+    const errorText = await searchResponse.text();
+    console.error('⚠️ Error en la búsqueda de MAL:', searchResponse.status, errorText);
+  }
+} catch (fetchError: any) {
+  console.error('⚠️ Error al buscar en MAL (continuando con valores por defecto):', fetchError.message);
+  console.error('   Stack:', fetchError.stack);
+}
 
     // 2. Verificar si el anime ya existe en la base de datos
     const animeResult = await client.execute({
