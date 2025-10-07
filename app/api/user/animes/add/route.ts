@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getTursoClient } from '../../../../lib/turso';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../auth/[...nextauth]/route';
+import { searchMALAnime } from '../../../../lib/malSearchService';
 
 // Helper para convertir BigInt a Number de forma segura
 function bigIntToNumber(value: any): number {
@@ -84,7 +85,6 @@ export async function POST(request: Request) {
   try {
     const client = getTursoClient();
 
-    // Obtener nombres de estado, rating y temporada
     const stateName = STATES_VIEW_OPTIONS.find(s => s.id === stateId)?.name || null;
     const ratingValue = RATINGS_OPTIONS.find(r => r.id === rateId)?.value || null;
     const seasonName = SEASONS_OPTIONS.find(s => s.id === seasonId)?.name || null;
@@ -95,13 +95,9 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // 1. Buscar el anime en MyAnimeList usando Jikan
-    const baseUrl = getBaseUrl(request);
-    const searchUrl = `${baseUrl}/api/user/animes/search-mal?name=${encodeURIComponent(animeName)}&season=${seasonCour}&season_name=${seasonName}&year=${year}`;
+    // 1. Buscar el anime en MyAnimeList - AHORA SIN FETCH
+    console.log('🔍 Buscando anime en MAL:', animeName);
     
-    console.log('🔍 Buscando anime en MAL vía Jikan:', searchUrl);
-    
-    // Valores por defecto - SOLO los campos que existen en tu tabla
     let malId = null;
     let malTitle = animeName;
     let malTitleEnglish = null;
@@ -111,73 +107,46 @@ export async function POST(request: Request) {
     let searchMethod = null;
 
     try {
-  const searchResponse = await fetch(searchUrl, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    signal: AbortSignal.timeout(15000),
-  });
-
-  console.log('📡 Status de respuesta:', searchResponse.status);
-  console.log('📡 Headers:', Object.fromEntries(searchResponse.headers.entries()));
-
-  if (searchResponse.ok) {
-    const searchData = await searchResponse.json();
-    
-    // 🔍 LOG CRÍTICO: Ver qué recibimos
-    console.log('📦 RAW searchData completo:', JSON.stringify(searchData, null, 2));
-    console.log('🔍 searchData.success:', searchData.success, '(type:', typeof searchData.success, ')');
-    console.log('🔍 searchData.mal_id:', searchData.mal_id, '(type:', typeof searchData.mal_id, ')');
-    console.log('🔍 searchData.image_url:', searchData.image_url);
-    
-    // Verificar la condición
-    const conditionResult = searchData.success && searchData.mal_id;
-    console.log('🎯 Condición (success && mal_id):', conditionResult);
-
-    if (searchData.success && searchData.mal_id) {
-      console.log('✅ ENTRANDO al bloque de asignación de valores MAL');
-      
-      malId = searchData.mal_id;
-      malTitle = searchData.title || animeName;
-      malTitleEnglish = searchData.title_english || null;
-      malTitleJapanese = searchData.title_japanese || null;
-      
-      if (searchData.image_url && searchData.image_url.trim() !== '') {
-        imageUrl = searchData.image_url;
-        console.log('✅ Image URL asignada:', imageUrl);
-      } else {
-        console.warn('⚠️ MAL no devolvió image_url válida, usando default');
-      }
-      
-      synopsis = searchData.synopsis || null;
-      searchMethod = searchData.search_method || null;
-
-      // 🔍 LOG: Verificar valores asignados
-      console.log('📝 Valores asignados después del bloque:', {
-        malId,
-        malTitle,
-        malTitleEnglish,
-        malTitleJapanese,
-        imageUrl,
-        synopsis: synopsis?.substring(0, 50) + '...',
-        searchMethod
+      // ✅ Llamada directa a la función compartida (sin HTTP)
+      const searchData = await searchMALAnime({
+        name: animeName,
+        season: seasonCour,
+        seasonName: seasonName,
+        year: year
       });
-    } else {
-      console.error('❌ NO SE CUMPLIÓ LA CONDICIÓN');
-      console.error('   - success:', searchData.success);
-      console.error('   - mal_id:', searchData.mal_id);
-    }
-  } else {
-    const errorText = await searchResponse.text();
-    console.error('⚠️ Error en la búsqueda de MAL:', searchResponse.status, errorText);
-  }
-} catch (fetchError: any) {
-  console.error('⚠️ Error al buscar en MAL (continuando con valores por defecto):', fetchError.message);
-  console.error('   Stack:', fetchError.stack);
-}
 
-    // 2. Verificar si el anime ya existe en la base de datos
+      console.log('📦 Resultado de búsqueda MAL:', searchData);
+
+      if (searchData.success && searchData.mal_id) {
+        console.log('✅ DATOS MAL ENCONTRADOS');
+        
+        malId = searchData.mal_id;
+        malTitle = searchData.title || animeName;
+        malTitleEnglish = searchData.title_english || null;
+        malTitleJapanese = searchData.title_japanese || null;
+        
+        if (searchData.image_url && searchData.image_url.trim() !== '') {
+          imageUrl = searchData.image_url;
+          console.log('✅ Image URL asignada:', imageUrl);
+        }
+        
+        synopsis = searchData.synopsis || null;
+        searchMethod = searchData.search_method || null;
+
+        console.log('📝 Valores MAL asignados:', {
+          malId,
+          malTitle,
+          imageUrl,
+          searchMethod
+        });
+      } else {
+        console.warn('⚠️ No se encontró en MAL:', searchData.error);
+      }
+    } catch (fetchError: any) {
+      console.error('⚠️ Error buscando en MAL:', fetchError.message);
+    }
+
+    // 2. Verificar si el anime ya existe
     const animeResult = await client.execute({
       sql: 'SELECT id, image_url, name_mal, mal_id FROM animes WHERE LOWER(name) = ? AND LOWER(season) = ? AND year = ?',
       args: [animeName.toLowerCase(), seasonCour.toLowerCase(), year]
@@ -187,7 +156,13 @@ export async function POST(request: Request) {
     let isNewAnime = false;
 
     if (animeResult.rows.length === 0) {
-      // Insertar nuevo anime - SOLO con los campos que existen en tu tabla
+      console.log('📝 Insertando nuevo anime con valores:', {
+        name: animeName,
+        mal_id: malId,
+        name_mal: malTitle,
+        image_url: imageUrl
+      });
+
       const insertResult = await client.execute({
         sql: `INSERT INTO animes (
           name, 
@@ -216,15 +191,14 @@ export async function POST(request: Request) {
           synopsis
         ]
       });
+      
       animeId = bigIntToNumber(insertResult.lastInsertRowid);
       isNewAnime = true;
       console.log('✅ Nuevo anime insertado con ID:', animeId);
     } else {
-      // Anime existente
       const anime = animeResult.rows[0];
       animeId = bigIntToNumber(anime.id);
       
-      // Actualizar datos de MAL si los encontramos y son mejores que los existentes
       const shouldUpdateMal = malId && (
         !anime.mal_id || 
         !anime.name_mal || 
@@ -233,6 +207,8 @@ export async function POST(request: Request) {
       );
       
       if (shouldUpdateMal) {
+        console.log('🔄 Actualizando anime existente con datos MAL');
+        
         await client.execute({
           sql: `UPDATE animes 
                 SET mal_id = COALESCE(mal_id, ?),
@@ -257,7 +233,7 @@ export async function POST(request: Request) {
             animeId
           ]
         });
-        console.log('✅ Anime actualizado con datos de MAL/Jikan');
+        console.log('✅ Anime actualizado');
       }
     }
 
@@ -293,16 +269,14 @@ export async function POST(request: Request) {
       ]
     });
 
-    console.log('✅ Relación usuario-anime creada exitosamente');
+    console.log('✅ Relación usuario-anime creada');
 
-    // Preparar respuesta con información detallada
     const responseData: any = {
       message: 'Anime añadido con éxito',
       animeId: animeId,
       isNewAnime: isNewAnime,
     };
 
-    // Incluir datos de MAL si los encontramos
     if (malId) {
       responseData.malData = {
         mal_id: malId,
@@ -326,36 +300,23 @@ export async function POST(request: Request) {
     return NextResponse.json(responseData);
 
   } catch (error: any) {
-    console.error('❌ Error adding anime for user:', error);
+    console.error('❌ Error adding anime:', error);
     
-    // Manejo específico de errores de base de datos
     if (error.message && error.message.includes('UNIQUE constraint failed')) {
       return NextResponse.json({
-        message: 'Error de base de datos: Posible duplicado de anime o asociación de usuario.'
+        message: 'Error de base de datos: Posible duplicado.'
       }, { status: 409 });
     }
 
-    // Error de columna no encontrada
     if (error.message && error.message.includes('no such column')) {
       return NextResponse.json({
-        message: 'Error de base de datos: Falta una columna en la tabla animes.',
-        hint: 'Verifica que ejecutaste las migraciones SQL correctamente.',
-        missing_columns: ['Posibles columnas faltantes: mal_id, name_mal_english, name_mal_japanese, synopsis'],
+        message: 'Error de base de datos: Falta una columna.',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
       }, { status: 500 });
     }
 
-    // Error de timeout
-    if (error.name === 'AbortError' || error.code === 'ETIMEDOUT') {
-      return NextResponse.json({
-        message: 'Timeout al buscar en MyAnimeList. El anime se guardó con datos básicos.',
-        hint: 'Puedes editar el anime más tarde para actualizar su información.'
-      }, { status: 500 });
-    }
-
-    // Error genérico
     return NextResponse.json({
-      message: 'Error interno del servidor al añadir anime.',
+      message: 'Error interno del servidor.',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     }, { status: 500 });
   }
