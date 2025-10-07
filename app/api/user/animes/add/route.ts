@@ -121,20 +121,29 @@ export async function POST(request: Request) {
 
       if (searchResponse.ok) {
         const searchData = await searchResponse.json();
-        console.log('📦 Respuesta de Jikan:', searchData);
+        console.log('✅ Respuesta de Jikan:', searchData);
 
         if (searchData.success && searchData.mal_id) {
           malId = searchData.mal_id;
           malTitle = searchData.title || animeName;
           malTitleEnglish = searchData.title_english || null;
           malTitleJapanese = searchData.title_japanese || null;
-          imageUrl = searchData.image_url || imageUrl;
+          
+          // ✅ FIX: Validar que image_url tenga un valor válido antes de usarlo
+          if (searchData.image_url && searchData.image_url.trim() !== '') {
+            imageUrl = searchData.image_url;
+            console.log('✅ Image URL obtenida de MAL:', imageUrl);
+          } else {
+            console.warn('⚠️ MAL no devolvió image_url válida, usando default');
+          }
+          
           synopsis = searchData.synopsis || null;
           searchMethod = searchData.search_method || null;
 
           console.log('✅ Anime encontrado en MAL:', {
             mal_id: malId,
             title: malTitle,
+            image_url: imageUrl,
             method: searchMethod
           });
         } else {
